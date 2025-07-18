@@ -1,0 +1,15 @@
+**/.DS_Store
+**/__pycache__/
+
+*.pyc
+
+instance/
+app/instance/
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+dist/
+build/
+*.egg-info/

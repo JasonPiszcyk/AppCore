@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "appcore"
+version = "1.0.0"
+authors = [
+  { name="Jason Piszcyk", email="Jason.Piszcyk@gmail.com" },
+]
+description = "Core Components used to create an application"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "schedule",
+  "requests",
+  "urllib3",
+  "pytest",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/JasonPiszcyk/AppCore"
+"Bug Tracker" = "https://github.com/JasonPiszcyk/AppCore/issues"
