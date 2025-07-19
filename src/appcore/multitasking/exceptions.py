@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-PyTest - Testing Config
+Exceptions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -19,32 +19,49 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+###########################################################################
+#
+# Imports
+#
+###########################################################################
+# Shared variables, constants, etc
 
-import pytest
-from src.appcore.multitasking.multitasking import MultiTasking
+# System Modules
+
+# Local app modules
+
+# Imports for python variable type hints
 
 
 ###########################################################################
 #
-# Config
+# Exceptions
 #
 ###########################################################################
-def pytest_configure(config):
+class MultiTaskingNotFound(Exception):
+    ''' Task not found '''
     pass
 
+
+class MultiTaskingQueueInvalidFormat(Exception):
+    ''' Invalid format for queue message '''
+    pass
+
+
+class MultiTaskingQueueInvalidFrame(Exception):
+    ''' Invalid frame for queue message '''
+    pass
+
+
+
 ###########################################################################
 #
-# Fixtures
+# In case this is run directly rather than imported...
 #
 ###########################################################################
-#
-# mt (multitasking object)
-#
-@pytest.fixture(scope="function")
-def mt():
-    _multitasking = MultiTasking()
-    _multitasking.start()
+'''
+Handle case of being run directly rather than imported
+'''
+if __name__ == "__main__":
+    pass
 
-    yield _multitasking
-
-    _multitasking.stop()

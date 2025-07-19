@@ -66,8 +66,19 @@ class Task():
         kwargs (dict): Arguments to pass the target function when starting.
         restart: (bool): If true, attempt to restart the task on completion or
             failure.
-        as_thread (bool): If true, run the task as thread.  If False, run the
-            task as a process.
+        runnable: (bool): If True the task can be started.  Should normally be
+            set by the task system.  If modified directly and set to True, and
+            restart is True, the watchdog will attempt to start the task. If
+            modified directly and set to False, the watchdog will attempt to
+            stop the task.
+            
+        as_thread (bool) [Readonly]: If true, the task is run as thread.  If
+            False, the task is run as a process.
+        thread_id (int) [Readonly]: The ID of the thread the task is using
+            (None if no  thread in use).
+        process_id (int) [Readonly]: The ID of the process the task is using
+            (None if no process in use).
+        is_alive (bool) [Readonly]: Indicator if the task is alive.
     '''
 
     #
@@ -77,6 +88,7 @@ class Task():
             self, 
             id: str = "",
             target: Callable | None = None,
+            stop: Callable | None = None,
             kwargs: BasicDict = {},
             restart: bool = False,
             as_thread: bool = True
@@ -86,7 +98,8 @@ class Task():
 
         Args:
             id (str): An identifier for the task
-            target (function): Function to run in the new thread/process
+            target (Callable): Function to run in the new thread/process
+            stop (Callable): Function to run to stop the thread/process
             kwargs (dict): Arguments to pass the target function
             restart: (bool): Restart the task if it stops (eg fails)
             as_thread (bool): Start the task as a thread (or a process)
@@ -102,11 +115,17 @@ class Task():
         self.__process: Process | None = None
         self.__as_thread: bool = as_thread
 
+        if stop:
+            self.__stop_function: Callable | None = stop
+        else:
+            self.__stop_function: Callable | None = None
+
         # Attributes
         self.id: str = id if id else str(uuid.uuid4())
         self.target: Callable | None = target
         self.kwargs: BasicDict = kwargs
         self.restart: bool = restart
+        self.runnable = False
 
 
     ###########################################################################
@@ -118,10 +137,8 @@ class Task():
     # as_thread
     #
     @property
-    def as_thread(self):
-        '''
-        Boolean property identifying if the task is run as a thread or process
-        '''
+    def as_thread(self) -> bool:
+        ''' Identify if the task is run as a thread or process '''
         return self.__as_thread
 
 
@@ -129,34 +146,32 @@ class Task():
     # thread_id
     #
     @property
-    def thread_id(self):
-        '''
-        The Thread ID property
-        '''
+    def thread_id(self) ->  int | None:
+        ''' The Thread ID property '''
         if self.__thread:
             return self.__thread.native_id
+        else:
+            return None
 
 
     #
     # process_id
     #
     @property
-    def process_id(self):
-        '''
-        The Process ID property
-        '''
+    def process_id(self) -> int | None:
+        ''' The Process ID property '''
         if self.__process:
             return self.__process.pid
+        else:
+            return None
 
 
     #
     # alive
     #
     @property
-    def is_alive(self):
-        '''
-        Boolean property indicating if the task is alive
-        '''
+    def is_alive(self) -> bool:
+        ''' Indicate if the task is alive '''
         if self.__as_thread:
             return self.__thread.is_alive() if self.__thread else False
         else:
@@ -234,7 +249,8 @@ class Task():
         '''
         if self.__thread:
             # Stop the thread
-            pass
+            if callable(self.__stop_function): self.__stop_function()
+            self.__thread_cleanup()
 
 
     ###########################################################################
@@ -314,7 +330,8 @@ class Task():
         '''
         if self.__process:
             # Stop the process
-            pass
+            if callable(self.__stop_function): self.__stop_function()
+            self.__process_cleanup()
 
 
     ###########################################################################
