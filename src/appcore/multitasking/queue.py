@@ -27,15 +27,21 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-import enum
-import queue
+from multiprocessing import Queue as ProcessQueue
+from multiprocessing import Barrier 
+from threading import BrokenBarrierError
+from queue import Empty as QueueEmpty
+from queue import Queue as ThreadQueue
+
 
 # Local app modules
-import src.appcore.multitasking.exceptions as exceptions
+from .queue_message import QueueMessage, MessageType
+from .queue_message import MessageFrameBase, BasicMessageFrame
+from . import exception
 
 # Imports for python variable type hints
 from typing import Callable
-from queue import Queue
+from multiprocessing.synchronize import Barrier as BarrierClass
 
 
 ###########################################################################
@@ -43,158 +49,8 @@ from queue import Queue
 # Module variables/constants/types
 #
 ###########################################################################
-# The message types
-class MessageType(enum.Enum):
-    OK              = "__message_type_ok__"
-    ERROR           = "__message_type_error__"
-    EMPTY           = "__message_type_empty__"
-    EXIT            = "__message_type_exit__"
-    REFRESH         = "__message_type_refresh__"
-    DATA            = "__message_type_data__"
-
-
-###########################################################################
-#
-# MessageFrameBase Class
-#
-###########################################################################
-class MessageFrameBase():
-    '''
-    Class to describe a queue message frame
-
-    The queue message frame describe the structure of data to be passed
-    in the message.
-
-    This is a base class hich should be inherited to build the class in use.
-
-    Attributes:
-        type (MessageType): The type of message being sent
-    '''
-    def __init__(self):
-        '''
-        Initializes the instance.
-
-        Args:
-            None
-        
-        Returns:
-            None
-
-        Raises:
-            None
-        '''
-        self.name = __class__.__name__
-
-
-###########################################################################
-#
-# MessageFrames - Different Frame types based on MessageFrameBase
-#
-###########################################################################
-#
-# Queue Message Frames derived from the MessageFrameBase class
-#
-class BasicMessageFrame(MessageFrameBase):
-    ''' Basic Message Frame '''
-    def __init__(self, text: str = ""):
-        super().__init__()
-        self.text = text
-
-
-###########################################################################
-#
-# QueueMessage Class
-#
-###########################################################################
-class QueueMessage():
-    '''
-    Class to describe message passed over queues
-
-    Each instance of the class describes a message that the multitasking system
-    can send via queues.  This class encapsulates a MessageFrame which is used
-    for structuring data sent over the queue
-
-    Attributes:
-        message_type (MessageType): The type of message being sent
-        frame: Structure of the data passed in the message. Derived from
-            QueueMessageFrameBase
-    '''
-
-    #
-    # __init__
-    #
-    def __init__(
-            self,
-            message_type: MessageType = MessageType.EMPTY,
-            frame: type[MessageFrameBase] | MessageFrameBase = BasicMessageFrame
-    ):
-        '''
-        Initializes the instance.
-
-        Args:
-            message_type (MessageType): The type of message being sent
-            frame: Structure of the data passed in the message. Derived from
-                QueueMessageFrameBase
-        
-        Returns:
-            None
-
-        Raises:
-            None
-        '''
-        # Private properties
-        if message_type in MessageType:
-            self.__type: MessageType = message_type
-        else:
-            self.__type: MessageType = MessageType.OK
-
-        # Attributes
-        if not isinstance(frame, type):
-            # We got a message instance not the class
-            _class: type = frame.__class__
-            _frame = frame
-        else:
-            # Frame was passed as the class (not an instance)
-            _class: type = frame
-            _frame = BasicMessageFrame()
-
-        # Check if this is the base class or a subclass of it
-        if isinstance(_class, MessageFrameBase) or \
-                issubclass(_class, MessageFrameBase):
-
-            self.__frame: MessageFrameBase = _frame
-        else:
-            raise exceptions.MultiTaskingQueueInvalidFrame(
-                "QueueMessage: Frame not valid when creating message"
-            )
-
-
-    ###########################################################################
-    #
-    # Properties
-    #
-    ###########################################################################
-    #
-    # type
-    #
-    @property
-    def type(self):
-        '''
-        The messsage type
-        '''
-        return self.__type
-
-
-    #
-    # frame
-    #
-    @property
-    def frame(self):
-        '''
-        The messsage frame
-        '''
-        return self.__frame
-
+# Max wait time for task to acknowledge listener exit message
+LISTENER_EXIT_TIMEOUT: float = 10.0
 
 ###########################################################################
 #
@@ -203,11 +59,10 @@ class QueueMessage():
 ###########################################################################
 class TaskQueue():
     '''
-    Task to manage a queue
+    A queue for the tasking system
 
-    A queue can be used to communicate between threads/processes.  This class
-    can create the queue, get and send message to the queue and also provide
-    a 'looping' function to process a queue continuously.
+    A queue to communicate between threads/process.  The class handles the
+    encapsulation of the message in a frame based on the message type.
 
     Attributes:
         message_type (MessageType): The type of message being sent
@@ -218,12 +73,13 @@ class TaskQueue():
     #
     # __init__
     #
-    def __init__(self):
+    def __init__(self, for_thread: bool = True):
         '''
         Initializes the instance.
 
         Args:
-            None
+            for_thread (bool): If True create a queue suitable for a thread,
+                if false create one suitable for a process
         
         Returns:
             None
@@ -232,8 +88,22 @@ class TaskQueue():
             None
         '''
         # Private properties
-        self.__queue: Queue = queue.Queue()
+        if for_thread:
+            self.__queue: ThreadQueue | ProcessQueue = ThreadQueue()
+        else:
+            self.__queue: ThreadQueue | ProcessQueue = ProcessQueue()
+
         self.__listener_running = False
+        self.__listener_exit_barrier: BarrierClass = Barrier(
+            parties=2, action=None, timeout=LISTENER_EXIT_TIMEOUT
+        )
+
+
+    ###########################################################################
+    #
+    # Properties
+    #
+    ###########################################################################
 
 
     ###########################################################################
@@ -262,18 +132,18 @@ class TaskQueue():
                 no message received, the message type is set to EMPTY
 
         Raises:
-            MultiTaskingQueueInvalidFormat: When message not in correct format
+            MultiTaskingQueueInvalidFormatError: When message not in correct format
         '''
         # Get a message from the queue
         try:
             _msg = self.__queue.get(block=block, timeout=timeout)
-        except queue.Empty:
+        except QueueEmpty:
             _msg = QueueMessage()
 
         # Confirm the message is in the correct format
         if not isinstance(_msg, QueueMessage):
-            raise exceptions.MultiTaskingQueueInvalidFormat(
-                "GET - Message format is incorrect"
+            raise exception.MultiTaskingQueueInvalidFormatError(
+                "Get - Message format is incorrect"
             )
 
         return _msg
@@ -296,13 +166,13 @@ class TaskQueue():
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat: When message not in correct format
+            MultiTaskingQueueInvalidFormatError: When message not in correct format
         '''
         assert msg
 
         # Confirm the message is in the correct format
-        if not isinstance(msg.__class__, QueueMessage):
-            raise exceptions.MultiTaskingQueueInvalidFormat(
+        if not isinstance(msg, QueueMessage):
+            raise exception.MultiTaskingQueueInvalidFormatError(
                 "Put - Message format is incorrect"
             )
 
@@ -310,9 +180,33 @@ class TaskQueue():
         self.__queue.put(msg)
 
 
+    #
+    # cleanup
+    #
+    def cleanup(self):
+        '''
+        Clean up the queue (eg remove all messages)
+
+        Args:
+            None
+        
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        _queue_not_empty = True
+        while _queue_not_empty:
+            try:
+                _ = self.__queue.get(block=False)
+            except QueueEmpty:
+                _queue_not_empty = False
+
+
     ###########################################################################
     #
-    # Methods to send to the queue
+    # Methods to send specific types to the queue
     #
     ###########################################################################
     #
@@ -329,10 +223,10 @@ class TaskQueue():
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat: When message not in correct format
+            None
         '''
         # Put a message on the queue
-        self.__queue.put(QueueMessage(message_type=MessageType.OK))
+        self.put(QueueMessage(message_type=MessageType.OK))
 
 
     #
@@ -349,10 +243,10 @@ class TaskQueue():
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat: When message not in correct format
+            None
         '''
         # Put a message on the queue
-        self.__queue.put(QueueMessage(message_type=MessageType.ERROR))
+        self.put(QueueMessage(message_type=MessageType.ERROR))
 
 
     #
@@ -369,10 +263,10 @@ class TaskQueue():
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat: When message not in correct format
+            None
         '''
         # Put a message on the queue
-        self.__queue.put(QueueMessage(message_type=MessageType.EXIT))
+        self.put(QueueMessage(message_type=MessageType.EXIT))
 
 
     #
@@ -389,10 +283,10 @@ class TaskQueue():
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat: When message not in correct format
+            None
         '''
         # Put a message on the queue
-        self.__queue.put(QueueMessage(message_type=MessageType.REFRESH))
+        self.put(QueueMessage(message_type=MessageType.REFRESH))
 
 
     #
@@ -412,16 +306,13 @@ class TaskQueue():
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat:
-                When message not in correct format
-            MultiTaskingQueueInvalidFrame:
-                When message frame is invalid
+            None
         '''
         # Create message - Will raise exception if message is invalid
         _msg = QueueMessage(message_type=MessageType.DATA, frame=frame)
 
         # Put a message on the queue
-        self.__queue.put(_msg)
+        self.put(_msg)
 
 
     ###########################################################################
@@ -469,6 +360,9 @@ class TaskQueue():
         Raises:
             None
         '''
+        # If the listener is already running, just return
+        if self.__listener_running: return
+
         self.__listener_running = True
         while self.__listener_running:
             _invalid_msg = False
@@ -477,7 +371,7 @@ class TaskQueue():
             try:
                 _msg = self.get()
 
-            except exceptions.MultiTaskingQueueInvalidFormat:
+            except exception.MultiTaskingQueueInvalidFormatError:
                 # Received message is invalid
                 _invalid_msg = True
                 _invalid_message_frame.text = "Message format is invalid"
@@ -492,6 +386,14 @@ class TaskQueue():
                         on_msg_exit(_msg.frame)
 
                     self.__listener_running = False
+
+                    try:
+                        self.__listener_exit_barrier.wait()
+                    except BrokenBarrierError:
+                        raise exception.MultiTaskingQueueListenerShutdownError (
+                            "Queue Listener exit sync failed"
+                        )
+
                     continue
 
                 # The refresh signal
@@ -515,7 +417,7 @@ class TaskQueue():
 
                     continue
 
-                # The refresh signal
+                # A DATA message
                 elif _msg.type == MessageType.DATA:
                     if callable(on_recv):
                         on_recv(_msg.frame)
@@ -536,25 +438,31 @@ class TaskQueue():
     #
     # listener_stop
     #
-    def listener_stop(self):
+    def listener_stop(self, remote=False):
         '''
-        Send a DATA message
+        Stop the listener
 
         Args:
-            None
+            remote (boolean): If true, the listener is in a separate process.
         
         Returns:
             None
 
         Raises:
-            MultiTaskingQueueInvalidFormat:
-                When message not in correct format
-            MultiTaskingQueueInvalidFrame:
-                When message frame is invalid
+            MultiTaskingQueueListenerShutdownError:
+                When the Listener does not acknowledge the exit message
         '''
-        if self.__listener_running:
+        if remote or self.__listener_running:
             # Put an EXIT message on the queue
             self.send_exit()
+
+            # Wait for the queue to acknowledge the message
+            try:
+                self.__listener_exit_barrier.wait()
+            except BrokenBarrierError:
+                raise exception.MultiTaskingQueueListenerShutdownError (
+                    "Queue Listener failed to shutdown correctly"
+                )
 
 
 ###########################################################################

@@ -28,20 +28,22 @@ along with this program (See file: COPYING). If not, see
 
 # System Modules
 import sys
-from threading import Lock, Event
+# from multiprocessing import Lock
+from threading import Lock
 import signal
 import enum
 
 # Local app modules
 from .task import Task
-from .base import ignore_signals
-from .queue import TaskQueue, MessageFrameBase
-from .exceptions import MultiTaskingNotFound
-from src.appcore.constants import BasicDict
+# from .base import ignore_signals
+from .queue import MessageFrameBase
+from .exception import MultiTaskingTaskNotFoundError
 
 # Imports for python variable type hints
 from typing import Callable
 from types import FrameType
+# from multiprocessing.synchronize import Lock as LockClass
+from src.appcore.constants import BasicDict
 
 
 ###########################################################################
@@ -55,6 +57,7 @@ TaskDict = dict[str, Task]
 WATCHDOG_WAIT_TIME: float = 1.0
 
 # A unique ID for the watchdog and queue tasks
+TASK_ID_PARENT_PROCESS: str = "01964d35-f692-476f-b8e8-de4b9958c102"
 TASK_ID_WATCHDOG: str = "ee232fe7-5cbc-43b7-aa7f-43445f75bc2b"
 TASK_ID_QUEUE_LOOP: str = "103fa334-0afa-4404-b2fb-d6180a20cda0"
 
@@ -114,7 +117,12 @@ class MultiTasking():
     #
     # __init__
     #
-    def __init__(self):
+    def __init__(
+            self,
+            parent_process_task: Task | None = None,
+            watchdog_task: Task | None = None,
+            queue_loop_task: Task | None = None
+    ):
         '''
         Initializes the instance.
 
@@ -128,15 +136,12 @@ class MultiTasking():
             None
         '''
         # Private properties
-        self.__queue_task_ops: TaskQueue = TaskQueue()
         self.__task_dict: TaskDict = {}
-        self.__task_dict_lock = Lock()
+        self.__task_dict_lock: Lock = Lock()
 
-        self.__watchdog_task: Task | None = None
-        self.__watchdog_ending: Event = Event()
-        self.__watchdog_ending.clear()
-
-        self.__queue_loop_task: Task | None = None
+        self.parent_process_task: Task | None = parent_process_task
+        self.watchdog_task: Task | None = watchdog_task
+        self.queue_loop_task: Task | None = queue_loop_task
 
         # Attributes
 
@@ -175,13 +180,25 @@ class MultiTasking():
 
 
     #
+    # parent_process_is_alive
+    #
+    @property
+    def parent_process_is_alive(self) -> bool:
+        ''' Check if the parent_process process is alive '''
+        if self.parent_process_task:
+            return self.parent_process_task.is_alive
+        else:
+            return False
+
+
+    #
     # watchdog_is_alive
     #
     @property
     def watchdog_is_alive(self) -> bool:
         ''' Check if the watchdog thread is alive '''
-        if self.__watchdog_task:
-            return self.__watchdog_task.is_alive
+        if self.watchdog_task:
+            return self.watchdog_task.is_alive
         else:
             return False
 
@@ -192,8 +209,8 @@ class MultiTasking():
     @property
     def queue_loop_is_alive(self) -> bool:
         ''' Check if the queue loop thread is alive '''
-        if self.__queue_loop_task:
-            return self.__queue_loop_task.is_alive
+        if self.queue_loop_task:
+            return self.queue_loop_task.is_alive
         else:
             return False
 
@@ -204,9 +221,78 @@ class MultiTasking():
     #
     ###########################################################################
     #
-    # __watchdog
+    # parent_process
     #
-    def __watchdog(self):
+    def parent_process(self):
+        '''
+        Create a separate process as a parent for other processes.
+
+        If we fork/spawn from this process, it copies across any threads
+        that may have been started.
+
+        This process is started before any other threads or processes in
+        the Task Management system
+
+        Args:
+            None
+        
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        if not self.parent_process_task:
+            raise RuntimeError(
+                "INTERNAL: Parent Process task has not been stored"
+            )
+
+        #
+        # Define the call back functions for the processing loop
+        #
+        def _parent_process_on_invalid(frame):
+            # Invalid packet or unknown message type - Ignore it
+            pass
+
+
+        def _parent_process_on_recv(frame):
+            # Should be message frames of type: TaskMgmtMessageFrame
+            if not isinstance(frame, TaskMgmtMessageFrame):
+                # We are going to ignore this message - Invalid frame
+                # May want to log this at some stage?
+                pass
+
+            else:
+                # Make sure there is a task to deal with
+                if not frame.task or not isinstance(frame.task, Task):
+                    return
+
+                elif frame.action == TaskAction.START:
+                    # Make sure we are starting a process
+                    if not frame.task.as_thread:
+                        if not frame.task.is_alive: frame.task.start()
+
+                elif frame.action == TaskAction.STOP:
+                    # Stop the task
+                    if not frame.task.as_thread:
+                        if frame.task.is_alive: frame.task.stop()
+
+
+        # Process the queue (will loop until stopped)
+        self.parent_process_task.send_to_task_queue.listener(
+            on_recv = _parent_process_on_recv,
+            on_invalid = _parent_process_on_invalid,
+            on_msg_ok = None,
+            on_msg_error = None,
+            on_msg_exit = None,
+            on_msg_refresh = None,
+        )
+
+
+    #
+    # watchdog
+    #
+    def watchdog(self):
         '''
         Check on the status of the processes and threads
 
@@ -219,16 +305,27 @@ class MultiTasking():
         Raises:
             None
         '''
+        # Make sure the watchdog and queue loop tasks have been stored
+        # Really big problem if they have not been created
+        if not self.watchdog_task:
+            raise RuntimeError("INTERNAL: Watchdog task has not been stored")
+
+        if not self.queue_loop_task:
+            raise RuntimeError("INTERNAL: Queue Loop task has not been stored")
+
         # Disable signal processing (Signals handled in queue_loop)
-        ignore_signals()
+        # ignore_signals()
+
+        # Get the event from the task
+        _watchdog_ending = self.watchdog_task.stop_event
+
+        # Get the 'to task' queue from the task
+        _send_queue = self.queue_loop_task.send_to_task_queue
 
         # Keep doing this until we receive the vent to exit
-        while not self.__watchdog_ending.is_set():
+        while not _watchdog_ending.is_set():
             # Process the tasks to make sure they are OK
             for _task in self.__task_dict.values():
-                # Ignore the watchdog task (This is running in it)
-                if _task.id == TASK_ID_WATCHDOG: continue
-
                 # Is the task alive?
                 if not _task.is_alive:
                     if _task.runnable:
@@ -237,33 +334,31 @@ class MultiTasking():
 
                         # Send a message to restart it if needed
                         if _task.restart:
-                            if self.__queue_task_ops:
-                                self.__queue_task_ops.send(
-                                    frame=TaskMgmtMessageFrame(
-                                        action=TaskAction.START,
-                                        task=_task
-                                    )
-                                )
-
-                else:
-                    if not _task.runnable:
-                        # Task is running, but marked not runnable.  Stop it
-                        if self.__queue_task_ops:
-                            self.__queue_task_ops.send(
+                            _send_queue.send(
                                 frame=TaskMgmtMessageFrame(
-                                    action=TaskAction.STOP,
+                                    action=TaskAction.START,
                                     task=_task
                                 )
                             )
 
-            # Pause, waiting for the 'end watchdog' event
-            self.__watchdog_ending.wait(timeout=WATCHDOG_WAIT_TIME)
+                else:
+                    if not _task.runnable:
+                        # Task is running, but marked not runnable.  Stop it
+                        _send_queue.send(
+                            frame=TaskMgmtMessageFrame(
+                                action=TaskAction.STOP,
+                                task=_task
+                            )
+                        )
+
+            # Pause, ending early if the stop event occurs
+            _watchdog_ending.wait(timeout=WATCHDOG_WAIT_TIME)
 
 
     #
-    # __queue_loop
+    # queue_loop
     #
-    def __queue_loop(self):
+    def queue_loop(self):
         '''
         Process messsage sent to the queue
 
@@ -276,39 +371,23 @@ class MultiTasking():
         Raises:
             None
         '''
-        # Define the signal handlers
-        def __signal_handler_exit(
-                signum: int = 0,
-                frame: FrameType | None = None
-        ):
-            self.stop()
+        # Make sure the queue loop task has been stored
+        # Really big problem if it has not been created
+        if not self.queue_loop_task:
+            raise RuntimeError("INTERNAL: Queue Loop task has not been stored")
 
-
-        def __signal_handler_reload(
-                signum: int = 0,
-                frame: FrameType | None = None
-        ):
-            self.refresh()
-
-        # Seems to fail if run via PyTest
-        if not "pytest" in sys.modules:
-            # Set up the signal handlers
-            # SIGINT (CTRL-C) and SIGTERM (kill <pid> can be handled the same)
-            signal.signal(signal.SIGTERM, __signal_handler_exit)
-            signal.signal(signal.SIGINT, __signal_handler_exit)
-
-            # SIGHUP (kill -1) - Usually means reload
-            signal.signal(signal.SIGHUP, __signal_handler_reload)
+        # Get the 'to task' queue from the task
+        _listen_queue = self.queue_loop_task.send_to_task_queue
 
         #
         # Define the call back functions for the processing loop
         #
-        def _on_invalid(frame):
+        def _queue_loop_on_invalid(frame):
             # Invalid packet or unknown message type - Ignore it
             pass
 
 
-        def _on_recv(frame):
+        def _queue_loop_on_recv(frame):
             # Should be message frames of type: TaskMgmtMessageFrame
             if not isinstance(frame, TaskMgmtMessageFrame):
                 # We are going to ignore this message - Invalid frame
@@ -323,127 +402,181 @@ class MultiTasking():
                 if frame.action == TaskAction.ADD:
                     # Add the task if not in the task dict
                     if not frame.task.id in self.__task_dict:
-                        self.__task_dict_lock.acquire()
-                        self.__task_dict[frame.task.id] = frame.task
-                        self.__task_dict_lock.release()
-
+                        with self.__task_dict_lock:
+                            self.__task_dict[frame.task.id] = frame.task
+    
                 elif frame.action == TaskAction.DELETE:
                     # Delete the task from the frame dict
                     if frame.task.id in self.__task_dict:
-                        self.__task_dict_lock.acquire()
-                        del self.__task_dict[frame.task.id]
-                        self.__task_dict_lock.release()
+                        with self.__task_dict_lock:
+                            del self.__task_dict[frame.task.id]
 
                 elif frame.action == TaskAction.START:
                     # Start the task
                     if frame.task.id in self.__task_dict:
                         frame.task.runnable = True
-                        frame.task.start()
+
+                        # If task is a process pass off to parent process
+                        if frame.task.as_thread:
+                            if not frame.task.is_alive: frame.task.start()
+                        elif self.parent_process_task:
+                            self.parent_process_task.send_to_task_queue.send(
+                                frame=frame
+                            )
 
                 elif frame.action == TaskAction.STOP:
                     # Stop the task if it is in the task dict
                     if frame.task.id in self.__task_dict:
                         frame.task.runnable = False
-                        frame.task.stop()
+
+                        # If task is a process pass off to parent process
+                        if frame.task.as_thread:
+                            if frame.task.is_alive: frame.task.stop()
+                        elif self.parent_process_task:
+                            self.parent_process_task.send_to_task_queue.send(
+                                frame=frame
+                            )
 
 
         # Process the queue (will loop until stopped)
-        self.__queue_task_ops.listener(
-            on_recv = _on_recv,
-            on_invalid = _on_invalid,
+        _listen_queue.listener(
+            on_recv = _queue_loop_on_recv,
+            on_invalid = _queue_loop_on_invalid,
             on_msg_ok = None,
             on_msg_error = None,
             on_msg_exit = None,
             on_msg_refresh = None,
         )
+# MultiTasking.queue_loop_task.exit_message_barrier.wait()
 
+    # #
+    # # start
+    # #
+    # def start(self) -> None:
+    #     '''
+    #     Starts the multitasking management tasks
 
-    #
-    # start
-    #
-    def start(self) -> None:
-        '''
-        Starts the multitasking management tasks
-
-        Args:
-            None
+    #     Args:
+    #         None
         
-        Returns:
-            None
+    #     Returns:
+    #         None
 
-        Raises:
-            None
-        '''
-        # Start the watchdog task
-        self.__watchdog_task = Task(
-                id=TASK_ID_WATCHDOG, target=self.__watchdog,
-                restart=True
-        )
+    #     Raises:
+    #         None
+    #     '''
+    #     # Start the parent process early to keep it fairly clean
+    #     # self.parent_process_task = Task(
+    #     #         id=TASK_ID_PARENT_PROCESS,
+    #     #         target=self.parent_process,
+    #     #         as_thread=False,
+    #     #         restart=True
+    #     # )
 
-        self.__watchdog_task.start()
+    #     # self.parent_process_task.start()
 
-        # Create the task to listen to the queue
-        self.__queue_loop_task = Task(
-                id=TASK_ID_QUEUE_LOOP, target=self.__queue_loop,
-                restart=True
-        )
+    #     # Define the signal handlers
+    #     def __signal_handler_exit(
+    #             signum: int = 0,
+    #             frame: FrameType | None = None
+    #     ):
+    #         self.stop()
 
-        self.__queue_loop_task.start()
+
+    #     def __signal_handler_reload(
+    #             signum: int = 0,
+    #             frame: FrameType | None = None
+    #     ):
+    #         self.refresh()
+
+    #     # Seems to fail if run via PyTest
+    #     if not "pytest" in sys.modules:
+    #         # Set up the signal handlers
+    #         # SIGINT (CTRL-C) and SIGTERM (kill <pid> can be handled the same)
+    #         signal.signal(signal.SIGTERM, __signal_handler_exit)
+    #         signal.signal(signal.SIGINT, __signal_handler_exit)
+
+    #         # SIGHUP (kill -1) - Usually means reload
+    #         signal.signal(signal.SIGHUP, __signal_handler_reload)
 
 
-    #
-    # stop
-    #
-    def stop(self) -> None:
-        '''
-        Stops the multitasking management tasks
+    #     # Create the task to listen to the queue
+    #     self.queue_loop_task = Task(
+    #             id=TASK_ID_QUEUE_LOOP,
+    #             target=self.__queue_loop,
+    #             restart=True
+    #     )
 
-        Args:
-            None
+    #     self.queue_loop_task.start()
+
+    #     # Start the watchdog task
+    #     self.watchdog_task = Task(
+    #             id=TASK_ID_WATCHDOG,
+    #             target=self.__watchdog,
+    #             restart=True
+    #     )
+
+    #     self.watchdog_task.start()
+
+
+    # #
+    # # stop
+    # #
+    # def stop(self) -> None:
+    #     '''
+    #     Stops the multitasking management tasks
+
+    #     Args:
+    #         None
         
-        Returns:
-            None
+    #     Returns:
+    #         None
 
-        Raises:
-            None
-        '''
-        # Stop all tasks
-        self.task_stop_all()
+    #     Raises:
+    #         None
+    #     '''
+    #     # Stop all tasks
+    #     self.task_stop_all()
 
-        # Stop the watchdog task
-        if self.__watchdog_task:
-            self.__watchdog_ending.set()
-            self.__watchdog_task.cleanup()
-            self.__watchdog_task = None
+    #     # Stop the watchdog task
+    #     if self.watchdog_task:
+    #         self.watchdog_task.stop_event.set()
+    #         self.watchdog_task.cleanup()
+    #         self.watchdog_task = None
 
-        # Stop the queue_loop task
-        if self.__queue_task_ops:
-            self.__queue_task_ops.listener_stop()
+    #     # Stop the queue loop task
+    #     if self.queue_loop_task:
+    #         self.queue_loop_task.send_to_task_queue.listener_stop()
+    #         self.queue_loop_task.cleanup()
+    #         self.queue_loop_task = None
 
-        # Cleanup the queue loop task
-        if self.__queue_loop_task:
-            self.__queue_loop_task.cleanup()
-            self.__queue_loop_task = None
+    #     # Stop the parent process task
+    #     if self.parent_process_task:
+    #         # The listener is in the parent process - so send EXIT
+    #         self.parent_process_task.send_to_task_queue.send_exit()
+    #         self.parent_process_task.cleanup()
+    #         self.parent_process_task = None
 
 
-    #
-    # refresh
-    #
-    def refresh(self) -> None:
-        '''
-        Send a refresh message to the task queuing system
+    # #
+    # # refresh
+    # #
+    # def refresh(self) -> None:
+    #     '''
+    #     Send a refresh message to the task queuing system
 
-        Args:
-            None
+    #     Args:
+    #         None
         
-        Returns:
-            None
+    #     Returns:
+    #         None
 
-        Raises:
-            None
-        '''
-        # Send the message
-        self.__queue_task_ops.send_refresh()
+    #     Raises:
+    #         None
+    #     '''
+    #     # Send the message
+    #     if self.queue_loop_task:
+    #         self.queue_loop_task.send_to_task_queue.send_refresh()
 
 
     ###########################################################################
@@ -491,9 +624,8 @@ class MultiTasking():
 
         # Add the task if not in the task dict
         if not _task.id in self.__task_dict:
-            self.__task_dict_lock.acquire()
-            self.__task_dict[_task.id] = _task
-            self.__task_dict_lock.release()
+            with self.__task_dict_lock:
+                self.__task_dict[_task.id] = _task
 
         return _task.id
 
@@ -515,16 +647,17 @@ class MultiTasking():
             None
 
         Raises:
-            MultiTaskingNotFound:
+            MultiTaskingTaskNotFoundError:
                 When the task ID cannot be found in the task dict
         '''
         # Check if the task is in the task dict
         if not id in self.__task_dict:
-            raise MultiTaskingNotFound
+            raise MultiTaskingTaskNotFoundError (
+                f"ID = {id}"
+            )
 
-        self.__task_dict_lock.acquire()
-        del self.__task_dict[id]
-        self.__task_dict_lock.release()
+        with self.__task_dict_lock:
+            del self.__task_dict[id]
 
 
     #
@@ -544,19 +677,22 @@ class MultiTasking():
             None
 
         Raises:
-            MultiTaskingNotFound:
+            MultiTaskingTaskNotFoundError:
                 When the task ID cannot be found in the task dict
         '''
         # Check if the task is in the task dict
         if not id in self.__task_dict:
-            raise MultiTaskingNotFound
-
-        self.__queue_task_ops.send(
-            frame=TaskMgmtMessageFrame( 
-                action=TaskAction.START,
-                task=self.__task_dict[id]
+            raise MultiTaskingTaskNotFoundError (
+                f"ID = {id}"
             )
-        )
+
+        if self.queue_loop_task:
+            self.queue_loop_task.send_to_task_queue.send(
+                frame=TaskMgmtMessageFrame( 
+                    action=TaskAction.START,
+                    task=self.__task_dict[id]
+                )
+            )
 
 
     #
@@ -576,19 +712,26 @@ class MultiTasking():
             None
 
         Raises:
-            MultiTaskingNotFound:
+            MultiTaskingTaskNotFoundError:
                 When the task ID cannot be found in the task dict
         '''
         # Check if the task is in the task dict
         if not id in self.__task_dict:
-            raise MultiTaskingNotFound
-
-        self.__queue_task_ops.send(
-            frame=TaskMgmtMessageFrame( 
-                action=TaskAction.STOP,
-                task=self.__task_dict[id]
+            raise MultiTaskingTaskNotFoundError (
+                f"ID = {id}"
             )
-        )
+
+        # If the task is already stopped, ignore it
+        if not self.__task_dict[id].is_alive:
+            return
+
+        if self.queue_loop_task:
+            self.queue_loop_task.send_to_task_queue.send(
+                frame=TaskMgmtMessageFrame( 
+                    action=TaskAction.STOP,
+                    task=self.__task_dict[id]
+                )
+            )
 
 
     #

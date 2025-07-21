@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Exceptions
+Signal functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -27,6 +27,7 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import signal
 
 # Local app modules
 
@@ -35,23 +36,33 @@ along with this program (See file: COPYING). If not, see
 
 ###########################################################################
 #
-# Exceptions
+# Module variables/constants/types
 #
 ###########################################################################
-class MultiTaskingNotFound(Exception):
-    ''' Task not found '''
-    pass
 
 
-class MultiTaskingQueueInvalidFormat(Exception):
-    ''' Invalid format for queue message '''
-    pass
+###########################################################################
+#
+# Signal Handlers
+#
+###########################################################################
+#
+# ignore_signals
+#
+def ignore_signals():
+    '''
+    Mask signals as these should be handled by the base process
 
+    Parameters:
+        None
 
-class MultiTaskingQueueInvalidFrame(Exception):
-    ''' Invalid frame for queue message '''
-    pass
-
+    Return Value:
+        None
+    '''
+    # Ignore the signals we handle in the base process
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
 
 ###########################################################################
@@ -64,4 +75,3 @@ Handle case of being run directly rather than imported
 '''
 if __name__ == "__main__":
     pass
-

@@ -19,3 +19,15 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+
+# What to import when 'import * from module'
+__all__ = [ "start", "stop", "refresh" ]
+
+
+# What to import as part of the the module (import module)
+from . import exception
+from .base import start, stop, refresh
+
+
+# Create an instance of MultiTasking object
+# from . multitasking import MultiTasking

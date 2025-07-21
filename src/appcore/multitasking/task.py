@@ -19,6 +19,12 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+
+def debug(msg):
+    with open("/tmp/jpp.txt", "at") as f:
+        f.write(f"{msg}\n")
+
+
 ###########################################################################
 #
 # Imports
@@ -27,15 +33,23 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import sys
+import enum
+import traceback
 import uuid
+from threading import Thread
+from multiprocessing import Process, Event
 
 # Local app modules
 from src.appcore.constants import BasicDict
+from .queue import TaskQueue
+from .exception import MultiTaskingTaskIsRunningError
+from .exception import MultiTaskingTaskIsNotRunningError
 
 # Imports for python variable type hints
-from typing import Callable
-from threading import Thread
-from multiprocessing import Process
+from typing import Any, Callable
+from multiprocessing.synchronize import Event as EventClass
+from src.appcore.constants import BasicDict
 
 
 ###########################################################################
@@ -45,7 +59,14 @@ from multiprocessing import Process
 ###########################################################################
 # When joining a thread/process, it may be terminating - wait for it to finish
 JOIN_THREAD_TIMEOUT: float = 10.0
-JOIN_PROCESS_TIMEOUT: float = 30.0
+JOIN_PROCESS_TIMEOUT: float = 10.0
+
+class TaskStatus(enum.Enum):
+    NOT_STARTED     = "Not Started"
+    RUNNING         = "Running"
+    STOPPED         = "Stopped"
+    ERROR           = "Error"
+    COMPLETED       = "Completed"
 
 
 ###########################################################################
@@ -79,6 +100,19 @@ class Task():
         process_id (int) [Readonly]: The ID of the process the task is using
             (None if no process in use).
         is_alive (bool) [Readonly]: Indicator if the task is alive.
+        is_running (bool) [Readonly]: True if the status is "Running".
+        is_ended (bool) [Readonly]: True if the task is no longer running.
+        status (string) [Readonly]: The status of the task.  One of:
+            Not Started: Task has been created but not started
+            Running: Task is currently running
+            Stopped: Task has been stopped and it's status is uncertain
+            Error: Task has end with an error
+            Completed: Task has ended without error
+        send_to_task_queue (TaskQueue) [Readonly]: The queue to send data to
+            the task.
+        recv_from_task_queue (TaskQueue) [Readonly]: The queue to receive
+            data from the task.
+        stop_event (Event) [Readonly]: Event to signal the end of the task.
     '''
 
     #
@@ -114,6 +148,14 @@ class Task():
         self.__thread: Thread | None = None
         self.__process: Process | None = None
         self.__as_thread: bool = as_thread
+        self.__send_to_task_queue: TaskQueue = TaskQueue(for_thread=as_thread)
+        self.__recv_from_task_queue: TaskQueue = TaskQueue(for_thread=as_thread)
+        self.__stop_event: EventClass = Event()
+        self.__status: TaskStatus = TaskStatus.NOT_STARTED
+        self.__return_value: Any = None
+        self.__exception_name: str | None = None
+        self.__exception_desc: str | None = None
+        self.__exception_stack: str | None = None
 
         if stop:
             self.__stop_function: Callable | None = stop
@@ -167,7 +209,7 @@ class Task():
 
 
     #
-    # alive
+    # is_alive
     #
     @property
     def is_alive(self) -> bool:
@@ -176,6 +218,115 @@ class Task():
             return self.__thread.is_alive() if self.__thread else False
         else:
             return self.__process.is_alive() if self.__process else False
+
+
+    #
+    # is_running
+    #
+    @property
+    def is_running(self) -> bool:
+        ''' Check if the task is running '''
+        return True if self.__status == TaskStatus.RUNNING else False
+
+
+    #
+    # is_ended
+    #
+    @property
+    def is_ended(self) -> bool:
+        ''' Check if the task has finished running '''
+        if self.__status == TaskStatus.ERROR or \
+                self.__status == TaskStatus.COMPLETED:
+            return True
+        else:
+            return False
+
+
+    #
+    # status
+    #
+    @property
+    def status(self) -> str:
+        ''' The status of the task '''
+        return self.__status.value
+
+
+    #
+    # send_to_task_queue
+    #
+    @property
+    def send_to_task_queue(self) -> TaskQueue:
+        ''' The queue for sending to the task '''
+        return self.__send_to_task_queue
+
+
+    #
+    # recv_from_task_queue
+    #
+    @property
+    def recv_from_task_queue(self) -> TaskQueue:
+        ''' The queue for receiving from the task '''
+        return self.__recv_from_task_queue
+
+
+    #
+    # stop_event
+    #
+    @property
+    def stop_event(self) -> EventClass:
+        ''' The event to stop the task '''
+        return self.__stop_event
+
+
+    ###########################################################################
+    #
+    # Convenience/helper functions
+    #
+    ###########################################################################
+    #
+    # run_task
+    #
+    def run_task(
+            self,
+            target: Callable | None = None,
+            kwargs: BasicDict = {},
+    ) -> None:
+        '''
+        Wrapper to run a task, and get return information
+
+        Args:
+            target (function): Function to run in the new thread/process
+            kwargs (dict): Arguments to pass the target function
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        debug(f"Running Task: {str(target)}")
+        if callable(target):
+            _return_value: Any = None
+            _exception_name: str | None = None
+            _exception_desc: str | None = None
+            _exception_stack: str | None = None
+
+            # Run the target, capturing any exceptions and the return value
+            try:
+                _return_value = target(**kwargs)
+                debug(f"Task finished OK: {str(target)}")
+
+            except Exception:
+                _exception_stack = traceback.format_exc()
+                debug(f"Task FAILED: {str(target)}")
+                debug(_exception_stack)
+
+                _exc_info = sys.exc_info()
+                if _exc_info:
+                    if _exc_info[0]:
+                        _exception_name = _exc_info[0].__name__
+                    if _exc_info[1]:
+                        _exception_desc = str(_exc_info[1])
 
 
     ###########################################################################
@@ -201,7 +352,15 @@ class Task():
         '''
         if self.__thread:
             # Try to join the thread - Has to be done to clean it up
-            self.__thread.join(timeout=JOIN_THREAD_TIMEOUT)
+            if self.is_alive:
+                self.__thread.join(timeout=JOIN_THREAD_TIMEOUT)
+
+            # The thread should now be gone
+            if self.is_alive:
+                raise MultiTaskingTaskIsRunningError(
+                    f"Cleanup aborted on running task: {self.id}"
+                )
+
             self.__thread: Thread | None = None
 
 
@@ -221,12 +380,20 @@ class Task():
         Raises:
             None
         '''
+        # Wrap the target function to gather information
+        _kwargs: BasicDict = {
+            "target": self.target,
+            "kwargs": self.kwargs
+        }
+
         if not self.__thread:
             if callable(self.target):
                 # Start the thread
+                self.__status = TaskStatus.RUNNING
+
                 self.__thread = Thread(
-                    target=self.target,
-                    kwargs=self.kwargs
+                    target=self.run_task,
+                    kwargs=_kwargs
                 )
                 self.__thread.start()
 
@@ -275,12 +442,15 @@ class Task():
             None
         '''
         if self.__process:
-            # If the process is alive, try to kill it
-            if self.__process.is_alive():
-                self.__process.terminate()
-
             # Try to join the process - Has to be done to clean it up
-            self.__process.join(timeout=JOIN_PROCESS_TIMEOUT)
+            if self.is_alive:
+                self.__process.join(timeout=JOIN_PROCESS_TIMEOUT)
+
+            if self.is_alive:
+                raise MultiTaskingTaskIsRunningError(
+                    f"Cleanup aborted on running task: {self.id}"
+                )
+
             self.__process.close()
             self.__process: Process | None = None
 
@@ -301,13 +471,21 @@ class Task():
         Raises:
             None
         '''
+        # Wrap the target function to gather information
+        _kwargs: BasicDict = {
+            "target": self.target,
+            "kwargs": self.kwargs
+        }
+
         if not self.__process:
             # Start the process
             if callable(self.target):
-                # Start the thread
+                # Start the process
+                self.__status = TaskStatus.RUNNING
+
                 self.__process = Process(
-                    target=self.target,
-                    kwargs=self.kwargs
+                    target=self.run_task,
+                    kwargs=_kwargs
                 )
                 self.__process.start()
 
@@ -355,10 +533,18 @@ class Task():
         Raises:
             None
         '''
+        # Clean up the queues
+        self.__send_to_task_queue.cleanup()
+        self.__recv_from_task_queue.cleanup()
+
+        # Cleanup the process/thread
         if self.__as_thread:
             self.__thread_cleanup()
         else:
             self.__process_cleanup()
+
+        # Clear the event
+        self.__stop_event.clear()
 
 
     #
@@ -375,8 +561,14 @@ class Task():
             None
 
         Raises:
-            None
+            MultiTaskingTaskIsRunningError:
+                When Attempt to start an already running task
         '''
+        if self.is_alive:
+            raise MultiTaskingTaskIsRunningError(
+                f"Task is already running: {self.id}"
+            )
+
         if self.__as_thread:
             self.__thread_start()
         else:
@@ -398,8 +590,14 @@ class Task():
             None
 
         Raises:
-            None
+            MultiTaskingTaskIsNotRunningError:
+                When attempting to stop a task that is not running
         '''
+        if not self.is_alive:
+            raise MultiTaskingTaskIsNotRunningError(
+                f"Task is not running: {self.id}"
+            )
+
         if self.__as_thread:
             self.__thread_stop()
         else:

@@ -24,8 +24,8 @@ import pytest
 import time
 from src.appcore.base import set_value
 from src.appcore.constants import DataType
-from src.appcore.multitasking.multitasking import MultiTasking
-from threading import Event
+import src.appcore.multitasking as multitasking
+from multiprocessing import Event
 
 
 #
@@ -46,23 +46,19 @@ class Test_Task_System():
     # Test on the mutitasking system control
     #
     def test_start_stop(self):
-        _mt = MultiTasking()
-
-        # Make sure the queue loop and watchdog threads have NOT started
-        assert not _mt.queue_loop_is_alive
-        assert not _mt.watchdog_is_alive
-
         # Start
-        _mt.start()
+        _mt = multitasking.start()
 
-        # Make sure the queue loop and watchdog threads have started
+        # Ensure the parent process, queue loop and watchdog tasks have started
+        assert _mt.parent_process_is_alive
         assert _mt.queue_loop_is_alive
         assert _mt.watchdog_is_alive
 
         # Stop
-        _mt.stop()
+        multitasking.stop()
 
         # Make sure the queue loop and watchdog threads have stopped
+        assert not _mt.parent_process_is_alive
         assert not _mt.queue_loop_is_alive
         assert not _mt.watchdog_is_alive
 
@@ -94,7 +90,7 @@ class Test_Task_Threads():
 
         # Add a task
         _task_id = mt.task_add(
-            id = "",
+            id = "Test Task - Thread",
             target = self._task_target,
             stop = self._task_stop,
             kwargs = {},
@@ -142,6 +138,7 @@ class Test_Task_Processes():
         Test_Task_Processes.task_test_event.clear()
         Test_Task_Processes.task_test_event.wait()
 
+
     # function to run to stop a task
     def _task_stop(self):
         Test_Task_Processes.task_test_event.set()
@@ -157,7 +154,7 @@ class Test_Task_Processes():
 
         # Add a task
         _task_id = mt.task_add(
-            id = "",
+            id = "Test Task - Process",
             target = self._task_target,
             stop = self._task_stop,
             kwargs = {},

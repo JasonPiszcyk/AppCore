@@ -21,7 +21,7 @@ along with this program (See file: COPYING). If not, see
 '''
 
 import pytest
-from src.appcore.multitasking.multitasking import MultiTasking
+import src.appcore.multitasking as multitasking
 
 
 ###########################################################################
@@ -42,9 +42,8 @@ def pytest_configure(config):
 #
 @pytest.fixture(scope="function")
 def mt():
-    _multitasking = MultiTasking()
-    _multitasking.start()
+    _mt = multitasking.start()
 
-    yield _multitasking
+    yield _mt
 
-    _multitasking.stop()
+    multitasking.stop()

@@ -27,42 +27,197 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import sys
 import signal
 
 # Local app modules
+from . import parent_process
+from .task import Task
+from .multitasking import MultiTasking as MultiTaskingClass
+from .multitasking import TASK_ID_PARENT_PROCESS, TASK_ID_QUEUE_LOOP
+from .multitasking import TASK_ID_WATCHDOG
+from .exception import MultiTaskingNotFoundError
 
 # Imports for python variable type hints
-
+from types import FrameType
 
 ###########################################################################
 #
 # Module variables/constants/types
 #
 ###########################################################################
+# The Multitasking class instance
+MultiTasking: MultiTaskingClass | None = None
 
 
 ###########################################################################
 #
-# Signal Handlers
+# Multiprocessing Management Functions
 #
 ###########################################################################
 #
-# ignore_signals
+# start
 #
-def ignore_signals():
+def start() -> MultiTaskingClass:
     '''
-    Mask signals as these should be handled by the base process
+    Start the MultiTasking management tasks
 
-    Parameters:
+    Args:
+        None
+    
+    Returns:
         None
 
-    Return Value:
+    Raises:
         None
     '''
-    # Ignore the signals we handle in the base process
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    # Identify the global variables
+    global MultiTasking
+
+    # Start the parent process early to keep it fairly clean
+    _parent_process_task = Task(
+            id=TASK_ID_PARENT_PROCESS,
+            target=parent_process.entry_point,
+            as_thread=False,
+            restart=True
+    )
+
+    # Pass the task over as a parameter (have to do this after the instance
+    # is created above)
+    _parent_process_task.kwargs = {
+        "parent_process_task": _parent_process_task
+    }
+
+    _parent_process_task.start()
+
+    # Define the signal handlers
+    def __signal_handler_exit(
+            signum: int = 0,
+            frame: FrameType | None = None
+    ):
+        stop()
+
+
+    def __signal_handler_reload(
+            signum: int = 0,
+            frame: FrameType | None = None
+    ):
+        refresh()
+
+
+    # Seems to fail if run via PyTest
+    if not "pytest" in sys.modules:
+        # Set up the signal handlers
+        # SIGINT (CTRL-C) and SIGTERM (kill <pid> can be handled the same)
+        signal.signal(signal.SIGTERM, __signal_handler_exit)
+        signal.signal(signal.SIGINT, __signal_handler_exit)
+
+        # SIGHUP (kill -1) - Usually means reload
+        signal.signal(signal.SIGHUP, __signal_handler_reload)
+
+
+    # Create the Multitasking Instance
+    MultiTasking = MultiTaskingClass(
+        parent_process_task = _parent_process_task,
+    )
+ 
+    # Create the task to listen to the queue
+    MultiTasking.queue_loop_task = Task(
+            id=TASK_ID_QUEUE_LOOP,
+            target=MultiTasking.queue_loop,
+            restart=True
+    )
+
+    MultiTasking.queue_loop_task.start()
+
+    # Start the watchdog task
+    MultiTasking.watchdog_task = Task(
+            id=TASK_ID_WATCHDOG,
+            target=MultiTasking.watchdog,
+            restart=True
+    )
+
+    MultiTasking.watchdog_task.start()
+
+    # Return the class
+    return MultiTasking
+
+
+#
+# stop
+#
+def stop() -> None:
+    '''
+    Stop the MultiTasking management tasks
+
+    Args:
+        None
+    
+    Returns:
+        None
+
+    Raises:
+        MultiTaskingNotFoundError:
+            When the MultiTask Instance in not available
+    '''
+    # Identify the global variables
+    global MultiTasking
+
+    # Not much we can do with out the MultiTasking instance
+    if not MultiTasking:
+        raise MultiTaskingNotFoundError("Unable to find MultiTasking Instance")
+
+    # # Stop all tasks
+    MultiTasking.task_stop_all()
+
+    # Stop the watchdog task
+    if MultiTasking.watchdog_task:
+        MultiTasking.watchdog_task.stop_event.set()
+        MultiTasking.watchdog_task.cleanup()
+        MultiTasking.watchdog_task = None
+
+    # Stop the queue loop task
+    if MultiTasking.queue_loop_task:
+        _listener_queue = MultiTasking.queue_loop_task.send_to_task_queue
+        _listener_queue.listener_stop()
+        MultiTasking.queue_loop_task.cleanup()
+        MultiTasking.queue_loop_task = None
+
+    # Stop the parent process task
+    if MultiTasking.parent_process_task:
+        _listener_queue = MultiTasking.parent_process_task.send_to_task_queue
+        _listener_queue.listener_stop(remote=True)
+        MultiTasking.parent_process_task.cleanup()
+        MultiTasking.parent_process_task = None
+
+
+#
+# refresh
+#
+def refresh() -> None:
+    '''
+    Send a refresh message to the tasking system
+
+    Args:
+        None
+    
+    Returns:
+        None
+
+    Raises:
+        MultiTaskingNotFoundError:
+            When the MultiTask Instance in not available
+    '''
+    # Identify the global variables
+    global MultiTasking
+
+    # Not much we can do with out the MultiTasking instance
+    if not MultiTasking:
+        raise MultiTaskingNotFoundError("Unable to find MultiTasking Instance")
+
+    # Send the message
+    if MultiTasking.queue_loop_task:
+        MultiTasking.queue_loop_task.send_to_task_queue.send_refresh()
 
 
 ###########################################################################

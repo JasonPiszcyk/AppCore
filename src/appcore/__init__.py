@@ -20,6 +20,8 @@ along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
 
+# What to import when 'import * from module'
 __all__ = [ "multitasking" ]
 
-from .multitasking import multitasking
+# What to import as part of the the module (import module)
+from . import multitasking
