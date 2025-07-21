@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Exceptions
+Constants
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -27,60 +27,43 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import enum
 
 # Local app modules
 
 # Imports for python variable type hints
+from typing import Any, Callable
 
 
 ###########################################################################
 #
-# Exceptions
+# Types
 #
 ###########################################################################
-class MultiTaskingNotFoundError(Exception):
-    ''' Task not found '''
-    pass
+type BasicDict = dict[str, Any]
 
 
-class MultiTaskingTaskNotFoundError(Exception):
-    ''' Task not found '''
-    pass
-
-
-class MultiTaskingTaskIsRunningError(Exception):
-    ''' Task not found '''
-    pass
-
-
-class MultiTaskingTaskIsNotRunningError(Exception):
-    ''' Task not found '''
-    pass
-
-
-class MultiTaskingQueueInvalidFormatError(Exception):
-    ''' Invalid format for queue message '''
-    pass
-
-
-class MultiTaskingQueueInvalidFrameError(Exception):
-    ''' Invalid frame for queue message '''
-    pass
-
-
-class MultiTaskingQueueListenerShutdownError(Exception):
-    ''' Invalid frame for queue message '''
-    pass
-
-
-class MultiTaskingManagerNotFoundError(Exception):
-    ''' The multiprocessing resource manager has not been configured '''
-    pass
-
-
-class MultiTaskingStatusUpdateError(Exception):
-    ''' Error when updating status '''
-    pass
+###########################################################################
+#
+# Enums
+#
+###########################################################################
+#
+# DataType
+#
+class DataType(enum.Enum):
+    INT             = "int"
+    INTEGER         = "integer"
+    STR             = "str"
+    STRING          = "string"
+    BOOL            = "bool"
+    BOOLEAN         = "boolean"
+    DICT            = "dict"
+    DICTIONARY      = "dictionary"
+    UUID1           = "uuid1"
+    UUID3           = "uuid3"
+    UUID4           = "uuid4"
+    UUID5           = "uuid5"
 
 
 ###########################################################################

@@ -25,25 +25,21 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking.shared import AppGlobal
 
 # System Modules
-import sys
-# from multiprocessing import Lock
 from threading import Lock
-import signal
 import enum
 
 # Local app modules
-from .task import Task
-# from .base import ignore_signals
-from .queue import MessageFrameBase
-from .exception import MultiTaskingTaskNotFoundError
+from appcore.multitasking.task import Task
+from appcore.multitasking.queue import MessageFrameBase
+from appcore.multitasking.exception import MultiTaskingTaskNotFoundError
 
 # Imports for python variable type hints
 from typing import Callable
-from types import FrameType
-# from multiprocessing.synchronize import Lock as LockClass
-from src.appcore.constants import BasicDict
+from multiprocessing.managers import SyncManager
+from appcore.shared import BasicDict
 
 
 ###########################################################################
@@ -56,18 +52,13 @@ TaskDict = dict[str, Task]
 # How often should the watchdog check the tasks
 WATCHDOG_WAIT_TIME: float = 1.0
 
-# A unique ID for the watchdog and queue tasks
-TASK_ID_PARENT_PROCESS: str = "01964d35-f692-476f-b8e8-de4b9958c102"
-TASK_ID_WATCHDOG: str = "ee232fe7-5cbc-43b7-aa7f-43445f75bc2b"
-TASK_ID_QUEUE_LOOP: str = "103fa334-0afa-4404-b2fb-d6180a20cda0"
-
-
 # The message types
 class TaskAction(enum.Enum):
     START           = "__task_start__"
     STOP            = "__task_stop__"
     ADD             = "__task_add__"
     DELETE          = "__task_delete__"
+    STATUS          = "__task_status__"
 
 
 ###########################################################################
@@ -108,6 +99,8 @@ class MultiTasking():
     Attributes:
         tasks (list) [Readonly]: A list of the current task IDs
         running_tasks (list) [Readonly]: A list of the current running task IDs
+        parent_process_is_alive (bool) [Readonly]: Indicator if the 'parent
+            process' process is alive
         watchdog_is_alive (bool) [Readonly]: Indicator if the watchdog thread 
             is alive
         queue_loop_is_alive (bool) [Readonly]: Indicator if the queue loop
@@ -121,13 +114,17 @@ class MultiTasking():
             self,
             parent_process_task: Task | None = None,
             watchdog_task: Task | None = None,
-            queue_loop_task: Task | None = None
+            queue_loop_task: Task | None = None,
     ):
         '''
         Initializes the instance.
 
         Args:
-            id (str): An identifier for the task
+            parent_process_task (Task): The parent process Task that was
+                created by 'start'
+            watchdog_task (Task): The watchdog Task that was created by 'start'
+            queue_loop_task (Task): The queue loop Task that was created
+                by 'start'
         
         Returns:
             None
@@ -139,11 +136,11 @@ class MultiTasking():
         self.__task_dict: TaskDict = {}
         self.__task_dict_lock: Lock = Lock()
 
+        # Attributes
         self.parent_process_task: Task | None = parent_process_task
         self.watchdog_task: Task | None = watchdog_task
         self.queue_loop_task: Task | None = queue_loop_task
 
-        # Attributes
 
 
     ###########################################################################
@@ -215,6 +212,19 @@ class MultiTasking():
             return False
 
 
+    #
+    # manager
+    #
+    @property
+    def manager(self) -> SyncManager | None:
+        ''' The multiprocessing manager to enable resource sharing'''
+        _manager = AppGlobal.get("MultiProcessingManager", None)
+        if not _manager:
+            return None
+        else:
+            return _manager
+
+
     ###########################################################################
     #
     # Management Functions for the Multitasking System
@@ -223,70 +233,70 @@ class MultiTasking():
     #
     # parent_process
     #
-    def parent_process(self):
-        '''
-        Create a separate process as a parent for other processes.
+    # def parent_process(self):
+    #     '''
+    #     Create a separate process as a parent for other processes.
 
-        If we fork/spawn from this process, it copies across any threads
-        that may have been started.
+    #     If we fork/spawn from this process, it copies across any threads
+    #     that may have been started.
 
-        This process is started before any other threads or processes in
-        the Task Management system
+    #     This process is started before any other threads or processes in
+    #     the Task Management system
 
-        Args:
-            None
+    #     Args:
+    #         None
         
-        Returns:
-            None
+    #     Returns:
+    #         None
 
-        Raises:
-            None
-        '''
-        if not self.parent_process_task:
-            raise RuntimeError(
-                "INTERNAL: Parent Process task has not been stored"
-            )
+    #     Raises:
+    #         None
+    #     '''
+    #     if not self.parent_process_task:
+    #         raise RuntimeError(
+    #             "INTERNAL: Parent Process task has not been stored"
+    #         )
 
-        #
-        # Define the call back functions for the processing loop
-        #
-        def _parent_process_on_invalid(frame):
-            # Invalid packet or unknown message type - Ignore it
-            pass
-
-
-        def _parent_process_on_recv(frame):
-            # Should be message frames of type: TaskMgmtMessageFrame
-            if not isinstance(frame, TaskMgmtMessageFrame):
-                # We are going to ignore this message - Invalid frame
-                # May want to log this at some stage?
-                pass
-
-            else:
-                # Make sure there is a task to deal with
-                if not frame.task or not isinstance(frame.task, Task):
-                    return
-
-                elif frame.action == TaskAction.START:
-                    # Make sure we are starting a process
-                    if not frame.task.as_thread:
-                        if not frame.task.is_alive: frame.task.start()
-
-                elif frame.action == TaskAction.STOP:
-                    # Stop the task
-                    if not frame.task.as_thread:
-                        if frame.task.is_alive: frame.task.stop()
+    #     #
+    #     # Define the call back functions for the processing loop
+    #     #
+    #     def _parent_process_on_invalid(frame):
+    #         # Invalid packet or unknown message type - Ignore it
+    #         pass
 
 
-        # Process the queue (will loop until stopped)
-        self.parent_process_task.send_to_task_queue.listener(
-            on_recv = _parent_process_on_recv,
-            on_invalid = _parent_process_on_invalid,
-            on_msg_ok = None,
-            on_msg_error = None,
-            on_msg_exit = None,
-            on_msg_refresh = None,
-        )
+    #     def _parent_process_on_recv(frame):
+    #         # Should be message frames of type: TaskMgmtMessageFrame
+    #         if not isinstance(frame, TaskMgmtMessageFrame):
+    #             # We are going to ignore this message - Invalid frame
+    #             # May want to log this at some stage?
+    #             pass
+
+    #         else:
+    #             # Make sure there is a task to deal with
+    #             if not frame.task or not isinstance(frame.task, Task):
+    #                 return
+
+    #             elif frame.action == TaskAction.START:
+    #                 # Make sure we are starting a process
+    #                 if not frame.task.as_thread:
+    #                     if not frame.task.is_alive: frame.task.start()
+
+    #             elif frame.action == TaskAction.STOP:
+    #                 # Stop the task
+    #                 if not frame.task.as_thread:
+    #                     if frame.task.is_alive: frame.task.stop()
+
+
+    #     # Process the queue (will loop until stopped)
+    #     self.parent_process_task.send_to_task_queue.listener(
+    #         on_recv = _parent_process_on_recv,
+    #         on_invalid = _parent_process_on_invalid,
+    #         on_msg_ok = None,
+    #         on_msg_error = None,
+    #         on_msg_exit = None,
+    #         on_msg_refresh = None,
+    #     )
 
 
     #
@@ -447,136 +457,6 @@ class MultiTasking():
             on_msg_exit = None,
             on_msg_refresh = None,
         )
-# MultiTasking.queue_loop_task.exit_message_barrier.wait()
-
-    # #
-    # # start
-    # #
-    # def start(self) -> None:
-    #     '''
-    #     Starts the multitasking management tasks
-
-    #     Args:
-    #         None
-        
-    #     Returns:
-    #         None
-
-    #     Raises:
-    #         None
-    #     '''
-    #     # Start the parent process early to keep it fairly clean
-    #     # self.parent_process_task = Task(
-    #     #         id=TASK_ID_PARENT_PROCESS,
-    #     #         target=self.parent_process,
-    #     #         as_thread=False,
-    #     #         restart=True
-    #     # )
-
-    #     # self.parent_process_task.start()
-
-    #     # Define the signal handlers
-    #     def __signal_handler_exit(
-    #             signum: int = 0,
-    #             frame: FrameType | None = None
-    #     ):
-    #         self.stop()
-
-
-    #     def __signal_handler_reload(
-    #             signum: int = 0,
-    #             frame: FrameType | None = None
-    #     ):
-    #         self.refresh()
-
-    #     # Seems to fail if run via PyTest
-    #     if not "pytest" in sys.modules:
-    #         # Set up the signal handlers
-    #         # SIGINT (CTRL-C) and SIGTERM (kill <pid> can be handled the same)
-    #         signal.signal(signal.SIGTERM, __signal_handler_exit)
-    #         signal.signal(signal.SIGINT, __signal_handler_exit)
-
-    #         # SIGHUP (kill -1) - Usually means reload
-    #         signal.signal(signal.SIGHUP, __signal_handler_reload)
-
-
-    #     # Create the task to listen to the queue
-    #     self.queue_loop_task = Task(
-    #             id=TASK_ID_QUEUE_LOOP,
-    #             target=self.__queue_loop,
-    #             restart=True
-    #     )
-
-    #     self.queue_loop_task.start()
-
-    #     # Start the watchdog task
-    #     self.watchdog_task = Task(
-    #             id=TASK_ID_WATCHDOG,
-    #             target=self.__watchdog,
-    #             restart=True
-    #     )
-
-    #     self.watchdog_task.start()
-
-
-    # #
-    # # stop
-    # #
-    # def stop(self) -> None:
-    #     '''
-    #     Stops the multitasking management tasks
-
-    #     Args:
-    #         None
-        
-    #     Returns:
-    #         None
-
-    #     Raises:
-    #         None
-    #     '''
-    #     # Stop all tasks
-    #     self.task_stop_all()
-
-    #     # Stop the watchdog task
-    #     if self.watchdog_task:
-    #         self.watchdog_task.stop_event.set()
-    #         self.watchdog_task.cleanup()
-    #         self.watchdog_task = None
-
-    #     # Stop the queue loop task
-    #     if self.queue_loop_task:
-    #         self.queue_loop_task.send_to_task_queue.listener_stop()
-    #         self.queue_loop_task.cleanup()
-    #         self.queue_loop_task = None
-
-    #     # Stop the parent process task
-    #     if self.parent_process_task:
-    #         # The listener is in the parent process - so send EXIT
-    #         self.parent_process_task.send_to_task_queue.send_exit()
-    #         self.parent_process_task.cleanup()
-    #         self.parent_process_task = None
-
-
-    # #
-    # # refresh
-    # #
-    # def refresh(self) -> None:
-    #     '''
-    #     Send a refresh message to the task queuing system
-
-    #     Args:
-    #         None
-        
-    #     Returns:
-    #         None
-
-    #     Raises:
-    #         None
-    #     '''
-    #     # Send the message
-    #     if self.queue_loop_task:
-    #         self.queue_loop_task.send_to_task_queue.send_refresh()
 
 
     ###########################################################################
@@ -591,8 +471,9 @@ class MultiTasking():
             self,
             id: str = "",
             target: Callable | None = None,
-            stop: Callable | None = None,
             kwargs: BasicDict = {},
+            stop_function: Callable | None = None,
+            stop_kwargs: BasicDict = {},
             restart: bool = False,
             as_thread: bool = True
     ) -> str:
@@ -602,8 +483,10 @@ class MultiTasking():
         Args:
             id (str): An identifier for the task
             target (function): Function to run in the new thread/process
-            stop (Callable): Function to run to stop the thread/process
             kwargs (dict): Arguments to pass the target function
+            stop_function (Callable): Function to run to stop the
+                thread/process
+            stop_kwargs (dict): Arguments to pass to the stop function.
             restart: (bool): Restart the task if it stops (eg fails)
             as_thread (bool): Start the task as a thread (or a process)
         
@@ -616,8 +499,9 @@ class MultiTasking():
         _task = Task(
             id=id,
             target=target,
-            stop=stop,
             kwargs=kwargs,
+            stop_function=stop_function,
+            stop_kwargs=stop_kwargs,
             restart=restart,
             as_thread=as_thread
         )
@@ -732,6 +616,47 @@ class MultiTasking():
                     task=self.__task_dict[id]
                 )
             )
+
+
+    #
+    # task_status
+    #
+    def task_status(
+            self,
+            id: str = "",
+    ) -> None:
+        '''
+        Update the volatile status info for a task
+
+        Args:
+            id (str): An identifier for the task
+        
+        Returns:
+            None
+
+        Raises:
+            MultiTaskingTaskNotFoundError:
+                When the task ID cannot be found in the task dict
+        '''
+        # Check if the task is in the task dict
+        if not id in self.__task_dict:
+            raise MultiTaskingTaskNotFoundError (
+                f"ID = {id}"
+            )
+
+        if not self.__task_dict[id].as_thread:
+            # Get the parent process to perform the update
+            # 'is_alive' will update info for the thread
+            if self.parent_process_task:
+                self.parent_process_task.send_to_task_queue.send(
+                    frame=TaskMgmtMessageFrame( 
+                        action=TaskAction.STATUS,
+                        task=self.__task_dict[id]
+                    )
+                )
+
+            # Wait for the update
+            self.__task_dict[id].status_barrier.wait()
 
 
     #

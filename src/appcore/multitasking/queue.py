@@ -25,19 +25,20 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking.shared import AppGlobal
 
 # System Modules
-from multiprocessing import Queue as ProcessQueue
-from multiprocessing import Barrier 
-from threading import BrokenBarrierError
-from queue import Empty as QueueEmpty
 from queue import Queue as ThreadQueue
-
+from multiprocessing import Queue as ProcessQueue
+from queue import Empty as QueueEmpty
+from threading import Barrier as ThreadBarrier
+from threading import BrokenBarrierError
 
 # Local app modules
-from .queue_message import QueueMessage, MessageType
-from .queue_message import MessageFrameBase, BasicMessageFrame
-from . import exception
+from appcore.multitasking.queue_message import QueueMessage, MessageType
+from appcore.multitasking.queue_message import MessageFrameBase
+from appcore.multitasking.queue_message import BasicMessageFrame
+from appcore.multitasking import exception
 
 # Imports for python variable type hints
 from typing import Callable
@@ -49,6 +50,13 @@ from multiprocessing.synchronize import Barrier as BarrierClass
 # Module variables/constants/types
 #
 ###########################################################################
+# A type for the Queue
+type TaskQueueType = ThreadQueue | ProcessQueue
+
+# A type for the Queue
+type TaskBarrierType = ThreadBarrier | BarrierClass
+
+
 # Max wait time for task to acknowledge listener exit message
 LISTENER_EXIT_TIMEOUT: float = 10.0
 
@@ -73,7 +81,9 @@ class TaskQueue():
     #
     # __init__
     #
-    def __init__(self, for_thread: bool = True):
+    def __init__(
+            self,
+            for_thread: bool = True):
         '''
         Initializes the instance.
 
@@ -89,14 +99,25 @@ class TaskQueue():
         '''
         # Private properties
         if for_thread:
-            self.__queue: ThreadQueue | ProcessQueue = ThreadQueue()
+            self.__queue: TaskQueueType = ThreadQueue()
+            self.__listener_exit_barrier: TaskBarrierType = ThreadBarrier(
+                parties=2, action=None, timeout=LISTENER_EXIT_TIMEOUT
+            )
         else:
-            self.__queue: ThreadQueue | ProcessQueue = ProcessQueue()
+            # We need the manager to create this
+            _manager = AppGlobal.get("MultiProcessingManager", None)
+            if not _manager:
+                raise exception.MultiTaskingManagerNotFoundError(
+                    "Cannot create process queue without multiprocess manager"
+                )
+
+            self.__queue: TaskQueueType = _manager.Queue()
+            self.__listener_exit_barrier: TaskBarrierType = \
+                    _manager.Barrier(
+                        parties=2, action=None, timeout=LISTENER_EXIT_TIMEOUT
+                    )
 
         self.__listener_running = False
-        self.__listener_exit_barrier: BarrierClass = Barrier(
-            parties=2, action=None, timeout=LISTENER_EXIT_TIMEOUT
-        )
 
 
     ###########################################################################

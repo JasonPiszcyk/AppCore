@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Common functions
+Shared info (eg variables, constants types)
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -30,7 +30,7 @@ along with this program (See file: COPYING). If not, see
 import uuid
 
 # Local app modules
-from .constants import DataType
+from .shared import DataType
 
 # Imports for python variable type hints
 from typing import Any

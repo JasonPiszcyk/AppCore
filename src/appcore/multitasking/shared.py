@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Constants
+Shared information (eg variables, etc)
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -27,12 +27,33 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-import enum
 
 # Local app modules
 
 # Imports for python variable type hints
-from typing import Any
+from multiprocessing.managers import SyncManager
+
+###########################################################################
+#
+# Variables / Constants
+#
+###########################################################################
+AppGlobal = {
+    # The Multitasking class instance
+    "MultiTasking": None,
+
+    # Multiprocessing Manager object to share resource between tasks
+    "MultiProcessingManager": None,
+
+    # The shared Task Info (updatable by all)
+    "TaskInfo": {}
+}
+
+
+# Unique IDs for the Parent process, watchdog and queue tasks
+TASK_ID_PARENT_PROCESS: str = "01964d35-f692-476f-b8e8-de4b9958c102"
+TASK_ID_WATCHDOG: str = "ee232fe7-5cbc-43b7-aa7f-43445f75bc2b"
+TASK_ID_QUEUE_LOOP: str = "103fa334-0afa-4404-b2fb-d6180a20cda0"
 
 
 ###########################################################################
@@ -40,7 +61,6 @@ from typing import Any
 # Types
 #
 ###########################################################################
-BasicDict = dict[str, Any]
 
 
 ###########################################################################
@@ -48,22 +68,6 @@ BasicDict = dict[str, Any]
 # Enums
 #
 ###########################################################################
-#
-# DataType
-#
-class DataType(enum.Enum):
-    INT             = "int"
-    INTEGER         = "integer"
-    STR             = "str"
-    STRING          = "string"
-    BOOL            = "bool"
-    BOOLEAN         = "boolean"
-    DICT            = "dict"
-    DICTIONARY      = "dictionary"
-    UUID1           = "uuid1"
-    UUID3           = "uuid3"
-    UUID4           = "uuid4"
-    UUID5           = "uuid5"
 
 
 ###########################################################################

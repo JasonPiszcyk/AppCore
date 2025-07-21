@@ -25,29 +25,31 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking.shared import AppGlobal
 
 # System Modules
 import sys
 import signal
+from multiprocessing import Manager
 
 # Local app modules
-from . import parent_process
-from .task import Task
-from .multitasking import MultiTasking as MultiTaskingClass
-from .multitasking import TASK_ID_PARENT_PROCESS, TASK_ID_QUEUE_LOOP
-from .multitasking import TASK_ID_WATCHDOG
-from .exception import MultiTaskingNotFoundError
+from appcore.multitasking import parent_process
+from appcore.multitasking.task import Task
+from appcore.multitasking.multitasking import MultiTasking as MultiTaskingClass
+from appcore.multitasking.shared import TASK_ID_PARENT_PROCESS
+from appcore.multitasking.shared import TASK_ID_QUEUE_LOOP
+from appcore.multitasking.shared import TASK_ID_WATCHDOG
+from appcore.multitasking.exception import MultiTaskingNotFoundError
 
 # Imports for python variable type hints
 from types import FrameType
+
 
 ###########################################################################
 #
 # Module variables/constants/types
 #
 ###########################################################################
-# The Multitasking class instance
-MultiTasking: MultiTaskingClass | None = None
 
 
 ###########################################################################
@@ -73,6 +75,16 @@ def start() -> MultiTaskingClass:
     '''
     # Identify the global variables
     global MultiTasking
+
+    # Create the MultiProcessing Manager
+    # Stored in a list so all other modules see the change
+    _manager = Manager()
+    if not AppGlobal.get("MultiProcessingManager", None):
+         AppGlobal['MultiProcessingManager'] = _manager
+
+    # Create the proxy objects in the TaskInfo Dict
+    AppGlobal["TaskInfo"]["status"] = _manager.dict()
+    AppGlobal["TaskInfo"]["results"] = _manager.dict()
 
     # Start the parent process early to keep it fairly clean
     _parent_process_task = Task(

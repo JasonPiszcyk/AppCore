@@ -30,7 +30,7 @@ along with this program (See file: COPYING). If not, see
 import enum
 
 # Local app modules
-from . import exception
+from appcore.multitasking import exception
 
 # Imports for python variable type hints
 

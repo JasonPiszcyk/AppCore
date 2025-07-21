@@ -25,12 +25,15 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking.shared import AppGlobal
 
 # System Modules
+from threading import BrokenBarrierError
 
 # Local app modules
-from .task import Task
-from .multitasking import TaskAction, TaskMgmtMessageFrame
+from appcore.multitasking.task import Task
+from appcore.multitasking.multitasking import TaskAction, TaskMgmtMessageFrame
+import appcore.multitasking.exception as exception
 
 # Imports for python variable type hints
 
@@ -95,12 +98,31 @@ def entry_point(parent_process_task: Task | None = None):
             elif frame.action == TaskAction.START:
                 # Make sure we are starting a process
                 if not frame.task.as_thread:
-                    if not frame.task.is_alive: frame.task.start()
+                    if not frame.task.is_alive:
+                        frame.task.start()
+                        _id = frame.task.id
+                        AppGlobal["TaskInfo"]["status"][_id]["pid"] = \
+                            frame.task.process_id
+
 
             elif frame.action == TaskAction.STOP:
                 # Stop the task
                 if not frame.task.as_thread:
                     if frame.task.is_alive: frame.task.stop()
+
+            elif frame.action == TaskAction.STATUS:
+                # Update the volatile status info for a process
+                if not frame.task.as_thread:
+                    _id = frame.task.id
+                    AppGlobal["TaskInfo"]["status"][_id]["is_alive"] = \
+                        frame.task.is_alive
+
+                    try:
+                        frame.task.status_barrier.wait()
+                    except BrokenBarrierError:
+                        raise exception.MultiTaskingStatusUpdateError (
+                            "Timed out waiting while updating status"
+                        )
 
 
     # Process the queue (will loop until stopped)

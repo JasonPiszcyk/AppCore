@@ -28,6 +28,3 @@ __all__ = [ "start", "stop", "refresh" ]
 from . import exception
 from .base import start, stop, refresh
 
-
-# Create an instance of MultiTasking object
-# from . multitasking import MultiTasking

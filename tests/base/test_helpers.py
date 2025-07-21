@@ -21,8 +21,8 @@ along with this program (See file: COPYING). If not, see
 '''
 # System Imports
 import pytest
-from src.appcore.base import set_value
-from src.appcore.constants import DataType
+from appcore.base import set_value
+from appcore.shared import DataType
 
 
 #

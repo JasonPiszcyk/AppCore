@@ -25,3 +25,8 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://github.com/JasonPiszcyk/AppCore"
 "Bug Tracker" = "https://github.com/JasonPiszcyk/AppCore/issues"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]

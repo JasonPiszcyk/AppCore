@@ -27,8 +27,8 @@ import sys
 #
 # Globals
 #
-MODULE_APPCORE = "src.appcore"
-MODULE_MULTITASKING = "src.appcore.multitasking"
+MODULE_APPCORE = "appcore"
+MODULE_MULTITASKING = "appcore.multitasking"
 
 DEFAULT_ATTR = "__doc__"
 

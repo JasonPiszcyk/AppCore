@@ -21,7 +21,8 @@ along with this program (See file: COPYING). If not, see
 '''
 
 import pytest
-import src.appcore.multitasking as multitasking
+import appcore.multitasking
+import appcore.multitasking as multitasking
 
 
 ###########################################################################
