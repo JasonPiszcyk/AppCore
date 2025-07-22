@@ -35,10 +35,11 @@ from appcore.multitasking.shared import AppGlobal
 
 # System Modules
 import sys
+import time
 import enum
 import traceback
 import uuid
-from threading import Thread
+from threading import Thread, BrokenBarrierError
 from multiprocessing import Process, current_process
 
 # Local app modules
@@ -55,11 +56,10 @@ from appcore.multitasking.queue_message import MessageFrameBase
 
 # Imports for python variable type hints
 from typing import Any, Callable
-from threading import Semaphore as SemaphoreType
 from threading import Event as EventClass
 from appcore.shared import BasicDict
 from multiprocessing.managers import SyncManager
-
+from threading import Barrier as BarrierClass
 
 ###########################################################################
 #
@@ -67,6 +67,14 @@ from multiprocessing.managers import SyncManager
 #
 ###########################################################################
 type TaskDict = dict[str, Task]
+
+# Task timeouts
+BARRIER_WAIT: float = 1.0
+TASK_START_TIMEOUT: float = 5.0
+TASK_STOP_TIMEOUT: float = 15.0
+
+# The process startup needs a small delay to allow for info to sync
+PROCESS_STARTUP_DELAY: float = 0.1
 
 # When joining a thread/process, it may be terminating - wait for it to finish
 JOIN_THREAD_TIMEOUT: float = 10.0
@@ -95,11 +103,12 @@ MGMT_TASKS = ( TASK_ID_PARENT_PROCESS, TASK_ID_QUEUE_LOOP, TASK_ID_WATCHDOG, )
 # Queue Message Frames derived from the MessageFrameBase class
 #
 class TaskMgmtMessageFrame(MessageFrameBase):
-    ''' Message Frame for task mamagement'''
+    ''' Message Frame for task management '''
     def __init__(
             self,
             action: TaskAction = TaskAction.ADD,
-            task: Task | None = None
+            task: Task | None = None,
+            barrier: BarrierClass | None = None
         ):
         super().__init__()
 
@@ -110,6 +119,7 @@ class TaskMgmtMessageFrame(MessageFrameBase):
             self.action = TaskAction.ADD
 
         self.task = task
+        self.barrier = barrier
 
 
 ###########################################################################
@@ -166,7 +176,6 @@ class Task():
         recv_from_task_queue (TaskQueue) [Readonly]: The queue to receive
             data from the task.
         stop_event (Event) [Readonly]: Event to signal the end of the task.
-        status_semaphore (Semaphore): Used to notify when status is updated
         task_info_status (dict) [Readonly]: The task info dict (status
             section) for this task
         task_info_results (dict) [Readonly]: The task info dict (results
@@ -251,8 +260,6 @@ class Task():
         self.__task_info["status"][self.id] = _status
         self.__task_info["results"][self.id] = _results
 
-        self.__status_semaphore: SemaphoreType = _manager.Semaphore(0)
-
 
     ###########################################################################
     #
@@ -318,16 +325,6 @@ class Task():
         # as they are not running under the parent process
         if self.id in MGMT_TASKS:
             return self.__process.is_alive() if self.__process else False
-
-        #     if not AppGlobal.get("MultiTasking", None):
-        #         raise exception.MultiTaskingNotFoundError(
-        #             "Unable to find the MultiTasking manager"
-        #         )
-
-        #     _multitasking = AppGlobal["MultiTasking"]
-
-        #     # Get the Multitasking manager to update the status
-        #     _multitasking.task_status(self.id)
 
         return self.__task_info["status"][self.id]["is_alive"]
 
@@ -410,15 +407,6 @@ class Task():
 
 
     #
-    # status_semaphore
-    #
-    @property
-    def status_semaphore(self) -> SemaphoreType:
-        ''' Semaphore to sync when status updates are performed '''
-        return self.__status_semaphore
-
-
-    #
     # task_info_status
     #
     @property
@@ -473,13 +461,13 @@ class Task():
             try:
                 _return_value = target(**kwargs)
                 self.__task_info["status"][self.id]["status"] = \
-                    TaskStatus.COMPLETED
+                    TaskStatus.COMPLETED.value
                 self.__task_info["status"][self.id]["is_alive"] = False
                 debug(f"Task finished OK: {str(target)}")
 
             except Exception:
                 self.__task_info["status"][self.id]["status"] = \
-                    TaskStatus.ERROR
+                    TaskStatus.ERROR.value
                 self.__task_info["status"][self.id]["is_alive"] = False
                 _exception_stack = traceback.format_exc()
                 debug(f"Task FAILED: {str(target)}")
@@ -491,6 +479,13 @@ class Task():
                         _exception_name = _exc_info[0].__name__
                     if _exc_info[1]:
                         _exception_desc = str(_exc_info[1])
+
+            # Set the return Value
+            _results = self.__task_info["results"][self.id]
+            _results["return_value"] = _return_value
+            _results["exception_name"] = _exception_name
+            _results["exception_desc"] = _exception_desc
+            _results["exception_stack"] = _exception_stack
 
 
     ###########################################################################
@@ -554,7 +549,7 @@ class Task():
             if callable(self.target):
                 # Start the thread
                 self.__task_info["status"][self.id]["status"] = \
-                    TaskStatus.RUNNING
+                    TaskStatus.RUNNING.value
 
                 self.__thread = Thread(
                     target=self.run_task,
@@ -648,7 +643,7 @@ class Task():
             if callable(self.target):
                 _task_info = self.__task_info["status"][self.id]
                 # Start the process
-                _task_info["status"] = TaskStatus.RUNNING
+                _task_info["status"] = TaskStatus.RUNNING.value
                 _task_info["is_alive"] = True
 
                 self.__process = Process(
@@ -658,6 +653,7 @@ class Task():
                 )
                 self.__process.start()
                 _task_info["pid"] = self.__process.pid
+                time.sleep(PROCESS_STARTUP_DELAY)
 
 
     #
@@ -721,12 +717,13 @@ class Task():
     #
     # start
     #
-    def start(self) -> None:
+    def start(self, barrier: BarrierClass | None = None) -> None:
         '''
         Start the task
 
         Args:
-            None
+            barrier (BarrierClass): If provided will trigger the barrier
+                once the task has been started
 
         Returns:
             None
@@ -740,16 +737,30 @@ class Task():
                 f"Task is already running: {self.id}"
             )
 
+        # Temp function to wait at the barrier if required
+        def _barrier_wait():
+            if not barrier: return
+ 
+            try:
+                barrier.wait(timeout=BARRIER_WAIT)
+            except BrokenBarrierError:
+                # Ignore this - The other process should be waiting
+                # (and this is to let the caller know we are done)
+                pass
+
+
         # Processes should be started via parent process (except MGMT tasks)
         if self.in_manager:
             if self.__as_thread:
                 # It is a thread - Just start it
                 self.__thread_start()
+                _barrier_wait()
                 return
 
             # If the is a MGMT task it can be started from here
             if self.id in MGMT_TASKS:
                 self.__process_start()
+                _barrier_wait()
                 return
 
             # Pass this to the parent process
@@ -763,25 +774,29 @@ class Task():
                 _multitasking.parent_process_task.send_to_task_queue.send(
                     frame=TaskMgmtMessageFrame( 
                         action=TaskAction.START,
-                        task=self
+                        task=self,
+                        barrier=barrier
                     )
                 )
             
             return
 
         # In the parent process, so start the process
-        if not self.__as_thread: self.__process_start()
+        if not self.__as_thread:
+            self.__process_start()
+            _barrier_wait()
 
 
     #
     # stop
     #
-    def stop(self) -> None:
+    def stop(self, barrier: BarrierClass | None = None) -> None:
         '''
         Stop the task
 
         Args:
-            None
+            barrier (BarrierClass): If provided will trigger the barrier
+                once the task has been stopped
 
         Returns:
             None
@@ -795,16 +810,29 @@ class Task():
                 f"Task is not running: {self.id}"
             )
 
+        def _barrier_wait():
+            if not barrier: return
+ 
+            try:
+                barrier.wait(timeout=BARRIER_WAIT)
+            except BrokenBarrierError:
+                # Ignore this - The other process should be waiting
+                # (and this is to let the caller know we are done)
+                pass
+
+
         # Processes should be started via parent process (except MGMT tasks)
         if self.in_manager:
             if self.__as_thread:
                 # It is a thread - Just stop it
                 self.__thread_stop()
+                _barrier_wait()
                 return
 
             # If the is a MGMT task it can be stopped from here
             if self.id in MGMT_TASKS:
                 self.__process_stop()
+                _barrier_wait()
                 return
 
             # Pass this to the parent process
@@ -818,14 +846,18 @@ class Task():
                 _multitasking.parent_process_task.send_to_task_queue.send(
                     frame=TaskMgmtMessageFrame( 
                         action=TaskAction.STOP,
-                        task=self
+                        task=self,
+                        barrier=barrier
                     )
                 )
 
             return
 
         # In the parent process, so stop the process
-        if not self.__as_thread: self.__process_stop()
+        if not self.__as_thread:
+            self.__process_stop()
+            _barrier_wait()
+
 
 
 ###########################################################################

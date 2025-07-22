@@ -23,7 +23,7 @@ along with this program (See file: COPYING). If not, see
 import pytest
 import time
 import appcore.multitasking as multitasking
-
+import appcore.multitasking.exception as exception
 
 #
 # Globals
@@ -68,6 +68,7 @@ class Test_Task_System():
     # Test on the mutitasking system control
     #
     def test_start_stop(self):
+        ''' Start and stop of the multitasking system '''
         # Start
         _mt = multitasking.start()
 
@@ -89,10 +90,12 @@ class Test_Task_System():
 # Tasks as threads
 #
 class Test_Task_Threads():
-    #
-    # Start / Stop a simple task
-    #
+    # Attributes for this set of tests
+    id_prefix = "Test Task - Thread"
+    as_thread = True
+
     def test_simple_task(self, mt):
+        ''' Start/stop a task (as a thread) '''
         # Make sure there are no tasks
         assert len(mt.tasks) == 0
         assert len(mt.running_tasks) == 0
@@ -103,13 +106,13 @@ class Test_Task_Threads():
         }
 
         _task_id = mt.task_add(
-            id = "Test Task - Thread",
+            id = f"{self.__class__.id_prefix} - Simple",
             target = simple_event_target,
             kwargs = _kwargs,
             stop_function = simple_event_stop,
             stop_kwargs = _kwargs,
             restart = False,
-            as_thread = True
+            as_thread = self.__class__.as_thread
         )
 
         # Make sure the task is added but not running
@@ -118,7 +121,6 @@ class Test_Task_Threads():
 
         # Start the task
         mt.task_start(_task_id)
-        time.sleep(1)
 
         # Make sure the task is running
         assert len(mt.tasks) == 1
@@ -126,7 +128,6 @@ class Test_Task_Threads():
 
         # Stop the task
         mt.task_stop(_task_id)
-        time.sleep(1)
 
         # Make sure no tasks are running
         assert len(mt.tasks) == 1
@@ -138,16 +139,62 @@ class Test_Task_Threads():
         # Make sure there are no tasks
         assert len(mt.tasks) == 0
         assert len(mt.running_tasks) == 0
+
+        # Ensure the task is gone
+        with pytest.raises(exception.MultiTaskingTaskNotFoundError):
+            mt.task_start(_task_id)
+
+
+    def test_task_status_complete(self, mt):
+        ''' 
+        Run a task (as thread) successfully and check status at each stage
+        '''
+        # Add a task
+        _kwargs = {
+            "test_event": mt.manager.Event()
+        }
+
+        _task_id = mt.task_add(
+            id = f"{self.__class__.id_prefix} - Status - Complete",
+            target = simple_event_target,
+            kwargs = _kwargs,
+            stop_function = simple_event_stop,
+            stop_kwargs = _kwargs,
+            restart = False,
+            as_thread = self.__class__.as_thread
+        )
+
+        # class TaskStatus(enum.Enum):
+        #     NOT_STARTED     = "Not Started"
+        #     RUNNING         = "Running"
+        #     STOPPED         = "Stopped"
+        #     ERROR           = "Error"
+        #     COMPLETED       = "Completed"
+
+        assert mt.task_status(_task_id) == "Not Started"
+
+        # Start the task
+        mt.task_start(_task_id)
+        assert mt.task_status(_task_id) == "Running"
+
+        # Stop the task
+        mt.task_stop(_task_id)
+        assert mt.task_status(_task_id) == "Completed"
+
+       # Delete the task
+        mt.task_delete(_task_id)
 
 
 #
 # Tasks as process
 #
 class Test_Task_Processes():
-    #
-    # Start / Stop a simple task
-    #
+    # Attributes for this set of tests
+    id_prefix = "Test Task - Process"
+    as_thread = False
+
     def test_simple_task(self, mt):
+        ''' Start/stop a task (as a process) '''
         # Make sure there are no tasks
         assert len(mt.tasks) == 0
         assert len(mt.running_tasks) == 0
@@ -159,13 +206,13 @@ class Test_Task_Processes():
 
         # Add a task
         _task_id = mt.task_add(
-            id = "Test Task - Process",
+            id = f"{self.__class__.id_prefix} - Simple",
             target = simple_event_target,
             kwargs = _kwargs,
             stop_function = simple_event_stop,
             stop_kwargs = _kwargs,
             restart = False,
-            as_thread = False
+            as_thread = self.__class__.as_thread
         )
 
         # Make sure the task is added but not running
@@ -174,7 +221,6 @@ class Test_Task_Processes():
 
         # Start the task
         mt.task_start(_task_id)
-        time.sleep(1)
 
         # Make sure the task is running
         assert len(mt.tasks) == 1
@@ -182,7 +228,6 @@ class Test_Task_Processes():
 
         # Stop the task
         mt.task_stop(_task_id)
-        time.sleep(1)
 
         # Make sure no tasks are running
         assert len(mt.tasks) == 1
@@ -194,3 +239,47 @@ class Test_Task_Processes():
         # Make sure there are no tasks
         assert len(mt.tasks) == 0
         assert len(mt.running_tasks) == 0
+
+        # Ensure the task is gone
+        with pytest.raises(exception.MultiTaskingTaskNotFoundError):
+            mt.task_start(_task_id)
+
+
+    def test_task_status_complete(self, mt):
+        ''' 
+        Run a task (as process) successfully and check status at each stage
+        '''
+        # Add a task
+        _kwargs = {
+            "test_event": mt.manager.Event()
+        }
+
+        _task_id = mt.task_add(
+            id = f"{self.__class__.id_prefix} - Status - Complete",
+            target = simple_event_target,
+            kwargs = _kwargs,
+            stop_function = simple_event_stop,
+            stop_kwargs = _kwargs,
+            restart = False,
+            as_thread = self.__class__.as_thread
+        )
+
+        # class TaskStatus(enum.Enum):
+        #     NOT_STARTED     = "Not Started"
+        #     RUNNING         = "Running"
+        #     STOPPED         = "Stopped"
+        #     ERROR           = "Error"
+        #     COMPLETED       = "Completed"
+
+        assert mt.task_status(_task_id) == "Not Started"
+
+        # Start the task
+        mt.task_start(_task_id)
+        assert mt.task_status(_task_id) == "Running"
+
+        # Stop the task
+        mt.task_stop(_task_id)
+        assert mt.task_status(_task_id) == "Completed"
+
+       # Delete the task
+        mt.task_delete(_task_id)

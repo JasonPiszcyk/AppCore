@@ -118,7 +118,7 @@ def entry_point(parent_process_task: Task | None = None):
                     _task_dict[frame.task.id] = frame.task
 
                 if not _task_dict[frame.task.id].is_process_alive:
-                    _task_dict[frame.task.id].start()
+                    _task_dict[frame.task.id].start(barrier=frame.barrier)
 
             elif frame.action == TaskAction.STOP:
                 # Make sure we are stopping a process
@@ -126,21 +126,12 @@ def entry_point(parent_process_task: Task | None = None):
 
                 if frame.task.id in _task_dict:
                     # Stop the task
-                    _task = _task_dict[frame.task.id]
                     if _task_dict[frame.task.id].is_process_alive:
-                        _task_dict[frame.task.id].stop()
+                        _task_dict[frame.task.id].stop(barrier=frame.barrier)
 
                     # Delete the local copy of the task
                     # It will be re-added if started again
                     del _task_dict[frame.task.id]
-
-            elif frame.action == TaskAction.STATUS:
-                # Update the volatile status info for a process
-                if not frame.task.as_thread:
-                    frame.task.task_info_status["is_alive"] = \
-                        frame.task.is_process_alive
-
-                    frame.task.status_semaphore.release(1)
 
 
     # Process the queue (will loop until stopped)

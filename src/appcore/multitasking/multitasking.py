@@ -34,14 +34,14 @@ def debug(msg):
 from appcore.multitasking.shared import AppGlobal
 
 # System Modules
-from threading import Lock
+from threading import Lock, BrokenBarrierError
 from multiprocessing import current_process
 
 # Local app modules
 from appcore.multitasking.task import Task, TaskMgmtMessageFrame
-from appcore.multitasking.queue import MessageFrameBase
+from appcore.multitasking.task import TASK_START_TIMEOUT, TASK_STOP_TIMEOUT
 import appcore.multitasking.exception as exception
-from appcore.multitasking.shared import TaskAction
+from appcore.multitasking.shared import TaskAction, TaskResults
 
 # Imports for python variable type hints
 from typing import Callable
@@ -114,7 +114,6 @@ class MultiTasking():
         self.parent_process_task: Task | None = parent_process_task
         self.watchdog_task: Task | None = watchdog_task
         self.queue_loop_task: Task | None = queue_loop_task
-
 
 
     ###########################################################################
@@ -204,7 +203,7 @@ class MultiTasking():
     #
     @property
     def pid(self) -> int | None:
-        ''' The PID of the process that start MultiTasking '''
+        ''' The PID of the process that started MultiTasking '''
         return self.__pid
 
 
@@ -343,13 +342,13 @@ class MultiTasking():
                     # Start the task
                     if frame.task.id in self.__task_dict:
                         frame.task.runnable = True
-                        frame.task.start()
+                        frame.task.start(barrier=frame.barrier)
 
                 elif frame.action == TaskAction.STOP:
                     # Stop the task if it is in the task dict
                     if frame.task.id in self.__task_dict:
                         frame.task.runnable = False
-                        frame.task.stop()
+                        frame.task.stop(barrier=frame.barrier)
 
 
         # Process the queue (will loop until stopped)
@@ -474,12 +473,32 @@ class MultiTasking():
                 f"ID = {id}"
             )
 
+        # Get the manager
+        if not AppGlobal.get("MultiProcessingManager", None):
+            raise exception.MultiTaskingManagerNotFoundError(
+                "Cannot create task without multiprocess manager"
+            )
+
+        _manager: SyncManager = AppGlobal["MultiProcessingManager"]
+        _barrier = _manager.Barrier(
+            parties=2, action=None, timeout=TASK_START_TIMEOUT
+        )
+
         if self.queue_loop_task:
             self.queue_loop_task.send_to_task_queue.send(
                 frame=TaskMgmtMessageFrame( 
                     action=TaskAction.START,
-                    task=self.__task_dict[id]
+                    task=self.__task_dict[id],
+                    barrier=_barrier
                 )
+            )
+
+        # Wait for the barrier to be met
+        try:
+            _barrier.wait()
+        except BrokenBarrierError:
+            raise exception.MultiTaskingTaskIsNotRunningError (
+                "Attempt to start the task timed out"
             )
 
 
@@ -513,59 +532,33 @@ class MultiTasking():
         if not self.__task_dict[id].is_alive:
             return
 
+        # Get the manager
+        if not AppGlobal.get("MultiProcessingManager", None):
+            raise exception.MultiTaskingManagerNotFoundError(
+                "Cannot create task without multiprocess manager"
+            )
+
+        _manager: SyncManager = AppGlobal["MultiProcessingManager"]
+        _barrier = _manager.Barrier(
+            parties=2, action=None, timeout=TASK_START_TIMEOUT
+        )
+
         if self.queue_loop_task:
             self.queue_loop_task.send_to_task_queue.send(
                 frame=TaskMgmtMessageFrame( 
                     action=TaskAction.STOP,
-                    task=self.__task_dict[id]
+                    task=self.__task_dict[id],
+                    barrier=_barrier
                 )
             )
 
-
-    #
-    # task_status
-    #
-    def task_status(
-            self,
-            id: str = "",
-    ) -> None:
-        '''
-        Update the volatile status info for a task
-
-        Args:
-            id (str): An identifier for the task
-        
-        Returns:
-            None
-
-        Raises:
-            MultiTaskingTaskNotFoundError:
-                When the task ID cannot be found in the task dict
-        '''
-        # Check if the task is in the task dict
-        if not id in self.__task_dict:
-            raise exception.MultiTaskingTaskNotFoundError (
-                f"ID = {id}"
+        # Wait for the barrier to be met
+        try:
+            _barrier.wait()
+        except BrokenBarrierError:
+            raise exception.MultiTaskingTaskIsRunningError (
+                "Attempt to stop the task timed out"
             )
-
-        if not self.__task_dict[id].as_thread:
-            # Get the parent process to perform the update
-            # 'is_alive' will update info for the thread
-            if self.parent_process_task:
-                self.parent_process_task.send_to_task_queue.send(
-                    frame=TaskMgmtMessageFrame( 
-                        action=TaskAction.STATUS,
-                        task=self.__task_dict[id]
-                    )
-                )
-
-            # Wait for the update
-            # if not self.__task_dict[id].status_semaphore.acquire(
-            #     blocking=True, timeout=STATUS_UPDATE_TIMEOUT
-            # ):
-            #     raise exception.MultiTaskingStatusUpdateError (
-            #         "Timed out while waiting for status update"
-            #     )
 
 
     #
@@ -586,6 +579,82 @@ class MultiTasking():
         '''
         for _task in self.__task_dict.values():
             self.task_stop(_task.id)
+
+
+    ###########################################################################
+    #
+    # Query Functions for tasks
+    #
+    ###########################################################################
+    #
+    # task_status
+    #
+    def task_status(
+            self,
+            id: str = "",
+    ) -> str:
+        '''
+        Get the status for the task
+
+        Args:
+            id (str): An identifier for the task
+        
+        Returns:
+            string: The current status of the task
+
+        Raises:
+            None
+        '''
+        # Check if the task is in the task dict
+        if not id in self.__task_dict:
+            raise exception.MultiTaskingTaskNotFoundError (
+                f"ID = {id}"
+            )
+
+        return self.__task_dict[id].status
+
+
+    #
+    # task_results
+    #
+    def task_results(
+            self,
+            id: str = "",
+    ) -> TaskResults:
+        '''
+        Get the results for the task
+
+        Args:
+            id (str): An identifier for the task
+        
+        Returns:
+            dict: The current results of the task
+
+        Raises:
+            None
+        '''
+        # Check if the task is in the task dict
+        if not id in self.__task_dict:
+            raise exception.MultiTaskingTaskNotFoundError (
+                f"ID = {id}"
+            )
+
+        if self.__task_dict[id].is_running:
+            _results = TaskResults(
+                status=self.__task_dict[id].status
+            )
+
+        else:
+            _task_info_results = self.__task_dict[id].task_info_results
+            _results = TaskResults(
+                status=self.__task_dict[id].status,
+                return_value=_task_info_results['return_value'],
+                exception_name=_task_info_results['exception_name'],
+                exception_desc=_task_info_results['exception_desc'],
+                exception_stack=_task_info_results['exception_stack']
+            )
+
+        return _results
 
 
 ###########################################################################
