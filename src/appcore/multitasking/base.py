@@ -30,12 +30,13 @@ from appcore.multitasking.shared import AppGlobal
 # System Modules
 import sys
 import signal
-from multiprocessing import Manager
+from multiprocessing import Manager, current_process
 
 # Local app modules
 from appcore.multitasking import parent_process
 from appcore.multitasking.task import Task
 from appcore.multitasking.multitasking import MultiTasking as MultiTaskingClass
+from appcore.multitasking.shared import TASK_ID_MULTITASKING_PROCESS
 from appcore.multitasking.shared import TASK_ID_PARENT_PROCESS
 from appcore.multitasking.shared import TASK_ID_QUEUE_LOOP
 from appcore.multitasking.shared import TASK_ID_WATCHDOG
@@ -73,8 +74,8 @@ def start() -> MultiTaskingClass:
     Raises:
         None
     '''
-    # Identify the global variables
-    global MultiTasking
+    # Set the name of the current process
+    current_process().name = TASK_ID_MULTITASKING_PROCESS
 
     # Create the MultiProcessing Manager
     # Stored in a list so all other modules see the change
@@ -83,6 +84,7 @@ def start() -> MultiTaskingClass:
          AppGlobal['MultiProcessingManager'] = _manager
 
     # Create the proxy objects in the TaskInfo Dict
+    AppGlobal["TaskInfo"] = _manager.dict()
     AppGlobal["TaskInfo"]["status"] = _manager.dict()
     AppGlobal["TaskInfo"]["results"] = _manager.dict()
 
@@ -129,30 +131,31 @@ def start() -> MultiTaskingClass:
 
 
     # Create the Multitasking Instance
-    MultiTasking = MultiTaskingClass(
+    _multitasking: MultiTaskingClass = MultiTaskingClass(
         parent_process_task = _parent_process_task,
     )
- 
+    AppGlobal["MultiTasking"] = _multitasking
+
     # Create the task to listen to the queue
-    MultiTasking.queue_loop_task = Task(
+    _multitasking.queue_loop_task = Task(
             id=TASK_ID_QUEUE_LOOP,
-            target=MultiTasking.queue_loop,
+            target=_multitasking.queue_loop,
             restart=True
     )
 
-    MultiTasking.queue_loop_task.start()
+    _multitasking.queue_loop_task.start()
 
     # Start the watchdog task
-    MultiTasking.watchdog_task = Task(
+    _multitasking.watchdog_task = Task(
             id=TASK_ID_WATCHDOG,
-            target=MultiTasking.watchdog,
+            target=_multitasking.watchdog,
             restart=True
     )
 
-    MultiTasking.watchdog_task.start()
+    _multitasking.watchdog_task.start()
 
     # Return the class
-    return MultiTasking
+    return _multitasking
 
 
 #
@@ -172,35 +175,34 @@ def stop() -> None:
         MultiTaskingNotFoundError:
             When the MultiTask Instance in not available
     '''
-    # Identify the global variables
-    global MultiTasking
-
     # Not much we can do with out the MultiTasking instance
-    if not MultiTasking:
+    if not AppGlobal.get("MultiTasking", None):
         raise MultiTaskingNotFoundError("Unable to find MultiTasking Instance")
 
-    # # Stop all tasks
-    MultiTasking.task_stop_all()
+    _multitasking: MultiTaskingClass = AppGlobal['MultiTasking']
+
+    # Stop all tasks
+    _multitasking.task_stop_all()
 
     # Stop the watchdog task
-    if MultiTasking.watchdog_task:
-        MultiTasking.watchdog_task.stop_event.set()
-        MultiTasking.watchdog_task.cleanup()
-        MultiTasking.watchdog_task = None
+    if _multitasking.watchdog_task:
+        _multitasking.watchdog_task.stop_event.set()
+        _multitasking.watchdog_task.cleanup()
+        _multitasking.watchdog_task = None
 
     # Stop the queue loop task
-    if MultiTasking.queue_loop_task:
-        _listener_queue = MultiTasking.queue_loop_task.send_to_task_queue
+    if _multitasking.queue_loop_task:
+        _listener_queue = _multitasking.queue_loop_task.send_to_task_queue
         _listener_queue.listener_stop()
-        MultiTasking.queue_loop_task.cleanup()
-        MultiTasking.queue_loop_task = None
+        _multitasking.queue_loop_task.cleanup()
+        _multitasking.queue_loop_task = None
 
     # Stop the parent process task
-    if MultiTasking.parent_process_task:
-        _listener_queue = MultiTasking.parent_process_task.send_to_task_queue
+    if _multitasking.parent_process_task:
+        _listener_queue = _multitasking.parent_process_task.send_to_task_queue
         _listener_queue.listener_stop(remote=True)
-        MultiTasking.parent_process_task.cleanup()
-        MultiTasking.parent_process_task = None
+        _multitasking.parent_process_task.cleanup()
+        _multitasking.parent_process_task = None
 
 
 #
@@ -220,16 +222,15 @@ def refresh() -> None:
         MultiTaskingNotFoundError:
             When the MultiTask Instance in not available
     '''
-    # Identify the global variables
-    global MultiTasking
-
     # Not much we can do with out the MultiTasking instance
-    if not MultiTasking:
+    if not AppGlobal.get("MultiTasking", None):
         raise MultiTaskingNotFoundError("Unable to find MultiTasking Instance")
 
+    _multitasking: MultiTaskingClass = AppGlobal['MultiTasking']
+
     # Send the message
-    if MultiTasking.queue_loop_task:
-        MultiTasking.queue_loop_task.send_to_task_queue.send_refresh()
+    if _multitasking.queue_loop_task:
+        _multitasking.queue_loop_task.send_to_task_queue.send_refresh()
 
 
 ###########################################################################

@@ -38,22 +38,27 @@ import sys
 import enum
 import traceback
 import uuid
-from threading import Thread, BrokenBarrierError
-from multiprocessing import Process
+from threading import Thread
+from multiprocessing import Process, current_process
 
 # Local app modules
 from appcore.shared import BasicDict
 from appcore.multitasking.queue import TaskQueue
 from appcore.multitasking import exception
+from appcore.multitasking.shared import TaskAction
+from appcore.multitasking.shared import TASK_ID_MULTITASKING_PROCESS
 from appcore.multitasking.shared import TASK_ID_PARENT_PROCESS
 from appcore.multitasking.shared import TASK_ID_QUEUE_LOOP
 from appcore.multitasking.shared import TASK_ID_WATCHDOG
+from appcore.multitasking.queue_message import MessageFrameBase
+
 
 # Imports for python variable type hints
 from typing import Any, Callable
-from threading import Barrier as ThreadBarrier
+from threading import Semaphore as SemaphoreType
 from threading import Event as EventClass
 from appcore.shared import BasicDict
+from multiprocessing.managers import SyncManager
 
 
 ###########################################################################
@@ -61,6 +66,8 @@ from appcore.shared import BasicDict
 # Module variables/constants/types
 #
 ###########################################################################
+type TaskDict = dict[str, Task]
+
 # When joining a thread/process, it may be terminating - wait for it to finish
 JOIN_THREAD_TIMEOUT: float = 10.0
 JOIN_PROCESS_TIMEOUT: float = 10.0
@@ -77,6 +84,32 @@ class TaskStatus(enum.Enum):
 
 # A set of the management tasks
 MGMT_TASKS = ( TASK_ID_PARENT_PROCESS, TASK_ID_QUEUE_LOOP, TASK_ID_WATCHDOG, )
+
+
+###########################################################################
+#
+# MessageFrames - Different Frame types based on MessageFrameBase
+#
+###########################################################################
+#
+# Queue Message Frames derived from the MessageFrameBase class
+#
+class TaskMgmtMessageFrame(MessageFrameBase):
+    ''' Message Frame for task mamagement'''
+    def __init__(
+            self,
+            action: TaskAction = TaskAction.ADD,
+            task: Task | None = None
+        ):
+        super().__init__()
+
+        # Validate the args
+        if action in TaskAction:
+            self.action = action
+        else:
+            self.action = TaskAction.ADD
+
+        self.task = task
 
 
 ###########################################################################
@@ -106,6 +139,9 @@ class Task():
             modified directly and set to False, the watchdog will attempt to
             stop the task.
             
+        in_manager (bool) [Readonly]: If true, the task has starrted by the
+            manager process (so it should be a thread).  If false it has been
+            by the parent process (so it shoudl be a process)
         as_thread (bool) [Readonly]: If true, the task is run as thread.  If
             False, the task is run as a process.
         thread_id (int) [Readonly]: The ID of the thread the task is using
@@ -113,6 +149,10 @@ class Task():
         process_id (int) [Readonly]: The ID of the process the task is using
             (None if no process in use).
         is_alive (bool) [Readonly]: Indicator if the task is alive.
+        is_process_alive (bool) [Readonly]:  Tries to query the process
+            attached to this task.  Will not try to contact the parent
+            process for the info, so is really only valid within the parent
+            process.
         is_running (bool) [Readonly]: True if the status is "Running".
         is_ended (bool) [Readonly]: True if the task is no longer running.
         status (string) [Readonly]: The status of the task.  One of:
@@ -126,6 +166,11 @@ class Task():
         recv_from_task_queue (TaskQueue) [Readonly]: The queue to receive
             data from the task.
         stop_event (Event) [Readonly]: Event to signal the end of the task.
+        status_semaphore (Semaphore): Used to notify when status is updated
+        task_info_status (dict) [Readonly]: The task info dict (status
+            section) for this task
+        task_info_results (dict) [Readonly]: The task info dict (results
+            section) for this task
     '''
 
     #
@@ -172,12 +217,14 @@ class Task():
         )
 
         # Get the manager
-        _manager = AppGlobal.get("MultiProcessingManager", None)
-        if not _manager:
+        if not AppGlobal.get("MultiProcessingManager", None):
             raise exception.MultiTaskingManagerNotFoundError(
                 "Cannot create task without multiprocess manager"
             )
 
+        _manager: SyncManager = AppGlobal["MultiProcessingManager"]
+
+        self.__task_info = AppGlobal["TaskInfo"]
         self.__stop_event: EventClass = _manager.Event()
 
         # Attributes
@@ -201,12 +248,10 @@ class Task():
         _results["exception_desc"] = ""
         _results["exception_stack"] = ""
 
-        AppGlobal["TaskInfo"]["status"][self.id] = _status
-        AppGlobal["TaskInfo"]["results"][self.id] = _results
+        self.__task_info["status"][self.id] = _status
+        self.__task_info["results"][self.id] = _results
 
-        self.__status_barrier: ThreadBarrier = _manager.Barrier(
-            parties=2, action=None, timeout=STATUS_UPDATE_TIMEOUT
-        )
+        self.__status_semaphore: SemaphoreType = _manager.Semaphore(0)
 
 
     ###########################################################################
@@ -214,6 +259,15 @@ class Task():
     # Properties
     #
     ###########################################################################
+    #
+    # in_manager
+    #
+    @property
+    def in_manager(self) -> bool:
+        ''' Is the task instance in the manager or parent process? '''
+        return current_process().name == TASK_ID_MULTITASKING_PROCESS
+
+
     #
     # as_thread
     #
@@ -241,7 +295,7 @@ class Task():
     @property
     def process_id(self) -> int | None:
         ''' The Process ID property '''
-        _pid = AppGlobal["TaskInfo"]["status"][self.id]["pid"]
+        _pid = self.__task_info["status"][self.id]["pid"]
 
         if _pid:
             return _pid
@@ -256,25 +310,39 @@ class Task():
     def is_alive(self) -> bool:
         ''' Indicate if the task is alive '''
         if self.__as_thread:
-            AppGlobal["TaskInfo"]["status"][self.id]["is_alive"] = \
-                    self.__thread.is_alive() if self.__thread else False
+            _is_alive = self.__thread.is_alive() if self.__thread else False
+            self.__task_info["status"][self.id]["is_alive"] = _is_alive
+            return _is_alive
+
+        # If this is one of the management processes, get it directly
+        # as they are not running under the parent process
+        if self.id in MGMT_TASKS:
+            return self.__process.is_alive() if self.__process else False
+
+        #     if not AppGlobal.get("MultiTasking", None):
+        #         raise exception.MultiTaskingNotFoundError(
+        #             "Unable to find the MultiTasking manager"
+        #         )
+
+        #     _multitasking = AppGlobal["MultiTasking"]
+
+        #     # Get the Multitasking manager to update the status
+        #     _multitasking.task_status(self.id)
+
+        return self.__task_info["status"][self.id]["is_alive"]
+
+
+    #
+    # is_process_alive
+    #
+    @property
+    def is_process_alive(self) -> bool:
+        ''' Query the stored process for this task, skip remote checking '''
+        if self.__as_thread:
+            # Task is configured as a thread
+            return False
         else:
-            # If this is one of the manager processes, get it directly
-            # as they are not running a=under the parent process
-            if self.id in MGMT_TASKS:
-                return self.__process.is_alive() if self.__process else False
-
-            else:
-                _multitasking = AppGlobal.get("MultiTasking", None)
-                if not _multitasking:
-                    raise exception.MultiTaskingNotFoundError(
-                        "Unable to find the MultiTasking manager"
-                    )
-
-                # Get the Multitasking manager to update the status
-                _multitasking.task_status(self.id)
-
-        return AppGlobal["TaskInfo"]["status"][self.id]["is_alive"]
+            return self.__process.is_alive() if self.__process else False
 
 
     #
@@ -283,7 +351,7 @@ class Task():
     @property
     def is_running(self) -> bool:
         ''' Check if the task is running '''
-        if AppGlobal["TaskInfo"]["status"][self.id]["status"] == \
+        if self.__task_info["status"][self.id]["status"] == \
                 TaskStatus.RUNNING.value:
             return True
         else:
@@ -296,7 +364,7 @@ class Task():
     @property
     def is_ended(self) -> bool:
         ''' Check if the task has finished running '''
-        _status = AppGlobal["TaskInfo"]["status"][self.id]["status"]
+        _status = self.__task_info["status"][self.id]["status"]
 
         if _status == TaskStatus.ERROR.value or \
                 _status == TaskStatus.COMPLETED.value:
@@ -311,7 +379,7 @@ class Task():
     @property
     def status(self) -> str:
         ''' The status of the task '''
-        return AppGlobal["TaskInfo"]["status"][self.id]["status"]
+        return self.__task_info["status"][self.id]["status"]
 
 
     #
@@ -342,12 +410,30 @@ class Task():
 
 
     #
-    # status_barrier
+    # status_semaphore
     #
     @property
-    def status_barrier(self) -> ThreadBarrier:
-        ''' Barrier to sync when status updates are performed '''
-        return self.__status_barrier
+    def status_semaphore(self) -> SemaphoreType:
+        ''' Semaphore to sync when status updates are performed '''
+        return self.__status_semaphore
+
+
+    #
+    # task_info_status
+    #
+    @property
+    def task_info_status(self) -> dict:
+        ''' Pointer to the task_info dict (synced between processes) '''
+        return self.__task_info["status"][self.id]
+
+
+    #
+    # task_info_results
+    #
+    @property
+    def task_info_results(self) -> dict:
+        ''' Pointer to the task_info dict (synced between processes) '''
+        return self.__task_info["results"][self.id]
 
 
     ###########################################################################
@@ -386,9 +472,15 @@ class Task():
             # Run the target, capturing any exceptions and the return value
             try:
                 _return_value = target(**kwargs)
+                self.__task_info["status"][self.id]["status"] = \
+                    TaskStatus.COMPLETED
+                self.__task_info["status"][self.id]["is_alive"] = False
                 debug(f"Task finished OK: {str(target)}")
 
             except Exception:
+                self.__task_info["status"][self.id]["status"] = \
+                    TaskStatus.ERROR
+                self.__task_info["status"][self.id]["is_alive"] = False
                 _exception_stack = traceback.format_exc()
                 debug(f"Task FAILED: {str(target)}")
                 debug(_exception_stack)
@@ -461,7 +553,7 @@ class Task():
         if not self.__thread:
             if callable(self.target):
                 # Start the thread
-                AppGlobal["TaskInfo"]["status"][self.id]["status"] = \
+                self.__task_info["status"][self.id]["status"] = \
                     TaskStatus.RUNNING
 
                 self.__thread = Thread(
@@ -487,7 +579,7 @@ class Task():
         Raises:
             None
         '''
-        if self.__thread:
+        if self.is_alive:
             # Stop the thread
             if callable(self.stop_function):
                 self.stop_function(**self.stop_kwargs)
@@ -554,15 +646,18 @@ class Task():
         if not self.__process:
             # Start the process
             if callable(self.target):
+                _task_info = self.__task_info["status"][self.id]
                 # Start the process
-                AppGlobal["TaskInfo"]["status"][self.id]["status"] = \
-                    TaskStatus.RUNNING
+                _task_info["status"] = TaskStatus.RUNNING
+                _task_info["is_alive"] = True
 
                 self.__process = Process(
                     target=self.run_task,
-                    kwargs=_kwargs
+                    kwargs=_kwargs,
+                    name=self.id
                 )
                 self.__process.start()
+                _task_info["pid"] = self.__process.pid
 
 
     #
@@ -581,7 +676,7 @@ class Task():
         Raises:
             None
         '''
-        if self.__process:
+        if self.is_alive:
             # Stop the process
             if callable(self.stop_function):
                 self.stop_function(**self.stop_kwargs)
@@ -645,11 +740,37 @@ class Task():
                 f"Task is already running: {self.id}"
             )
 
-        if self.__as_thread:
-            self.__thread_start()
-        else:
-            self.__process_start()
+        # Processes should be started via parent process (except MGMT tasks)
+        if self.in_manager:
+            if self.__as_thread:
+                # It is a thread - Just start it
+                self.__thread_start()
+                return
 
+            # If the is a MGMT task it can be started from here
+            if self.id in MGMT_TASKS:
+                self.__process_start()
+                return
+
+            # Pass this to the parent process
+            if not AppGlobal.get("MultiTasking", None):
+                raise exception.MultiTaskingNotFoundError(
+                    "Unable to find the MultiTasking manager"
+                )
+
+            _multitasking = AppGlobal["MultiTasking"]
+            if _multitasking.parent_process_task:
+                _multitasking.parent_process_task.send_to_task_queue.send(
+                    frame=TaskMgmtMessageFrame( 
+                        action=TaskAction.START,
+                        task=self
+                    )
+                )
+            
+            return
+
+        # In the parent process, so start the process
+        if not self.__as_thread: self.__process_start()
 
 
     #
@@ -674,10 +795,37 @@ class Task():
                 f"Task is not running: {self.id}"
             )
 
-        if self.__as_thread:
-            self.__thread_stop()
-        else:
-            self.__process_stop()
+        # Processes should be started via parent process (except MGMT tasks)
+        if self.in_manager:
+            if self.__as_thread:
+                # It is a thread - Just stop it
+                self.__thread_stop()
+                return
+
+            # If the is a MGMT task it can be stopped from here
+            if self.id in MGMT_TASKS:
+                self.__process_stop()
+                return
+
+            # Pass this to the parent process
+            if not AppGlobal.get("MultiTasking", None):
+                raise exception.MultiTaskingNotFoundError(
+                    "Unable to find the MultiTasking manager"
+                )
+
+            _multitasking = AppGlobal["MultiTasking"]
+            if _multitasking.parent_process_task:
+                _multitasking.parent_process_task.send_to_task_queue.send(
+                    frame=TaskMgmtMessageFrame( 
+                        action=TaskAction.STOP,
+                        task=self
+                    )
+                )
+
+            return
+
+        # In the parent process, so stop the process
+        if not self.__as_thread: self.__process_stop()
 
 
 ###########################################################################

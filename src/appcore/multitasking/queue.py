@@ -19,6 +19,12 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+
+def debug(msg):
+    with open("/tmp/jpp.txt", "at") as f:
+        f.write(f"{msg}\n")
+
+
 ###########################################################################
 #
 # Imports
@@ -43,6 +49,7 @@ from appcore.multitasking import exception
 # Imports for python variable type hints
 from typing import Callable
 from multiprocessing.synchronize import Barrier as BarrierClass
+from multiprocessing.managers import SyncManager
 
 
 ###########################################################################
@@ -56,9 +63,9 @@ type TaskQueueType = ThreadQueue | ProcessQueue
 # A type for the Queue
 type TaskBarrierType = ThreadBarrier | BarrierClass
 
-
 # Max wait time for task to acknowledge listener exit message
 LISTENER_EXIT_TIMEOUT: float = 10.0
+
 
 ###########################################################################
 #
@@ -105,11 +112,12 @@ class TaskQueue():
             )
         else:
             # We need the manager to create this
-            _manager = AppGlobal.get("MultiProcessingManager", None)
-            if not _manager:
+            if not AppGlobal.get("MultiProcessingManager", None):
                 raise exception.MultiTaskingManagerNotFoundError(
                     "Cannot create process queue without multiprocess manager"
                 )
+
+            _manager: SyncManager = AppGlobal["MultiProcessingManager"]
 
             self.__queue: TaskQueueType = _manager.Queue()
             self.__listener_exit_barrier: TaskBarrierType = \

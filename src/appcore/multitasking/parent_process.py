@@ -19,23 +19,26 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+
+def debug(msg):
+    with open("/tmp/jpp.txt", "at") as f:
+        f.write(f"{msg}\n")
+
 ###########################################################################
 #
 # Imports
 #
 ###########################################################################
 # Shared variables, constants, etc
-from appcore.multitasking.shared import AppGlobal
 
 # System Modules
-from threading import BrokenBarrierError
 
 # Local app modules
-from appcore.multitasking.task import Task
-from appcore.multitasking.multitasking import TaskAction, TaskMgmtMessageFrame
-import appcore.multitasking.exception as exception
+from appcore.multitasking.task import Task, TaskMgmtMessageFrame
+from appcore.multitasking.shared import TaskAction
 
 # Imports for python variable type hints
+from appcore.multitasking.task import TaskDict
 
 
 ###########################################################################
@@ -75,6 +78,10 @@ def entry_point(parent_process_task: Task | None = None):
     '''
     assert parent_process_task
 
+    # Create a task dict here to store the tasks we are managing
+    # Will be a subset of the tasks in MultiTasking
+    _task_dict: TaskDict = {}
+
     #
     # Define the call back functions for the processing loop
     #
@@ -95,34 +102,45 @@ def entry_point(parent_process_task: Task | None = None):
             if not frame.task or not isinstance(frame.task, Task):
                 return
 
+                # Delete the task from the frame dict
+                if frame.task.id in _task_dict:
+                    del _task_dict[frame.task.id]
+
             elif frame.action == TaskAction.START:
                 # Make sure we are starting a process
-                if not frame.task.as_thread:
-                    if not frame.task.is_alive:
-                        frame.task.start()
-                        _id = frame.task.id
-                        AppGlobal["TaskInfo"]["status"][_id]["pid"] = \
-                            frame.task.process_id
+                if frame.task.as_thread: return
 
+                # Add the task if not in the task dict
+                # We need a local copy to track the process
+                if not frame.task.id in _task_dict:
+                    # We can use frame.task, as it is already a copy of the
+                    # task stored in MultiTasking
+                    _task_dict[frame.task.id] = frame.task
+
+                if not _task_dict[frame.task.id].is_process_alive:
+                    _task_dict[frame.task.id].start()
 
             elif frame.action == TaskAction.STOP:
-                # Stop the task
-                if not frame.task.as_thread:
-                    if frame.task.is_alive: frame.task.stop()
+                # Make sure we are stopping a process
+                if frame.task.as_thread: return
+
+                if frame.task.id in _task_dict:
+                    # Stop the task
+                    _task = _task_dict[frame.task.id]
+                    if _task_dict[frame.task.id].is_process_alive:
+                        _task_dict[frame.task.id].stop()
+
+                    # Delete the local copy of the task
+                    # It will be re-added if started again
+                    del _task_dict[frame.task.id]
 
             elif frame.action == TaskAction.STATUS:
                 # Update the volatile status info for a process
                 if not frame.task.as_thread:
-                    _id = frame.task.id
-                    AppGlobal["TaskInfo"]["status"][_id]["is_alive"] = \
-                        frame.task.is_alive
+                    frame.task.task_info_status["is_alive"] = \
+                        frame.task.is_process_alive
 
-                    try:
-                        frame.task.status_barrier.wait()
-                    except BrokenBarrierError:
-                        raise exception.MultiTaskingStatusUpdateError (
-                            "Timed out waiting while updating status"
-                        )
+                    frame.task.status_semaphore.release(1)
 
 
     # Process the queue (will loop until stopped)

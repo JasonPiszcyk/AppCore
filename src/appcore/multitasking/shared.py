@@ -27,11 +27,12 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import enum
 
 # Local app modules
 
 # Imports for python variable type hints
-from multiprocessing.managers import SyncManager
+
 
 ###########################################################################
 #
@@ -51,9 +52,19 @@ AppGlobal = {
 
 
 # Unique IDs for the Parent process, watchdog and queue tasks
+TASK_ID_MULTITASKING_PROCESS: str = "2999169d-0bf2-4d6f-85bd-f4d404d219f1"
 TASK_ID_PARENT_PROCESS: str = "01964d35-f692-476f-b8e8-de4b9958c102"
 TASK_ID_WATCHDOG: str = "ee232fe7-5cbc-43b7-aa7f-43445f75bc2b"
 TASK_ID_QUEUE_LOOP: str = "103fa334-0afa-4404-b2fb-d6180a20cda0"
+
+
+# The message types
+class TaskAction(enum.Enum):
+    START           = "__task_start__"
+    STOP            = "__task_stop__"
+    ADD             = "__task_add__"
+    DELETE          = "__task_delete__"
+    STATUS          = "__task_status__"
 
 
 ###########################################################################

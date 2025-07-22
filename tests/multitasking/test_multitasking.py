@@ -29,6 +29,12 @@ import appcore.multitasking as multitasking
 # Globals
 #
 
+def debug(msg):
+    with open("/tmp/jpp.txt", "at") as f:
+        f.write(f"{msg}\n")
+
+
+
 ###########################################################################
 #
 # Functions to run in the tasks
@@ -172,7 +178,7 @@ class Test_Task_Processes():
 
         # Make sure the task is running
         assert len(mt.tasks) == 1
-        # assert len(mt.running_tasks) == 1
+        assert len(mt.running_tasks) == 1
 
         # Stop the task
         mt.task_stop(_task_id)
