@@ -34,6 +34,9 @@ def debug(msg):
         f.write(f"{msg}\n")
 
 
+EXCEPTION = RuntimeError
+EXCEPTION_DESC = "The exception description"
+
 
 ###########################################################################
 #
@@ -52,6 +55,13 @@ def simple_event_target(test_event=None):
 def simple_event_stop(test_event=None):
     assert test_event
     test_event.set()
+
+
+#
+# Task to generate an error
+#
+def error_event_target(test_event=None):
+    raise EXCEPTION(EXCEPTION_DESC)
 
 
 ###########################################################################
@@ -185,6 +195,43 @@ class Test_Task_Threads():
         mt.task_delete(_task_id)
 
 
+    def test_task_status_error(self, mt):
+        ''' 
+        Run a task (as thread) and have it error out
+        '''
+        # Add a task
+        _task_id = mt.task_add(
+            id = f"{self.__class__.id_prefix} - Status - Error",
+            target = error_event_target,
+            kwargs = None,
+            stop_function = None,
+            stop_kwargs = None,
+            restart = False,
+            as_thread = self.__class__.as_thread
+        )
+
+        assert mt.task_status(_task_id) == "Not Started"
+
+        # Start the task
+        mt.task_start(_task_id)
+
+        # Give the task a chance to run
+        time.sleep(0.2)
+        assert mt.task_status(_task_id) == "Error"
+
+        # Check the results
+        _results = mt.task_results(_task_id)
+        assert _results.status == "Error"
+        assert not _results.return_value
+        assert _results.exception_name == str(EXCEPTION.__name__)
+        assert _results.exception_desc == EXCEPTION_DESC
+        assert str(_results.exception_stack).find(
+                f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
+
+       # Delete the task
+        mt.task_delete(_task_id)
+
+
 #
 # Tasks as process
 #
@@ -280,6 +327,43 @@ class Test_Task_Processes():
         # Stop the task
         mt.task_stop(_task_id)
         assert mt.task_status(_task_id) == "Completed"
+
+       # Delete the task
+        mt.task_delete(_task_id)
+
+
+    def test_task_status_error(self, mt):
+        ''' 
+        Run a task (as thread) and have it error out
+        '''
+        # Add a task
+        _task_id = mt.task_add(
+            id = f"{self.__class__.id_prefix} - Status - Error",
+            target = error_event_target,
+            kwargs = None,
+            stop_function = None,
+            stop_kwargs = None,
+            restart = False,
+            as_thread = self.__class__.as_thread
+        )
+
+        assert mt.task_status(_task_id) == "Not Started"
+
+        # Start the task
+        mt.task_start(_task_id)
+
+        # Give the task a chance to run
+        time.sleep(0.2)
+        assert mt.task_status(_task_id) == "Error"
+
+        # Check the results
+        _results = mt.task_results(_task_id)
+        assert _results.status == "Error"
+        assert not _results.return_value
+        assert _results.exception_name == str(EXCEPTION.__name__)
+        assert _results.exception_desc == EXCEPTION_DESC
+        assert str(_results.exception_stack).find(
+                f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
 
        # Delete the task
         mt.task_delete(_task_id)

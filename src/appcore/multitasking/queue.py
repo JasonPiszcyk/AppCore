@@ -197,7 +197,7 @@ class TaskQueue():
         Raises:
             MultiTaskingQueueInvalidFormatError: When message not in correct format
         '''
-        assert msg
+        assert msg, "A message must be provided"
 
         # Confirm the message is in the correct format
         if not isinstance(msg, QueueMessage):

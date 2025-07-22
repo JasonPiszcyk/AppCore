@@ -72,7 +72,7 @@ def set_value(
     Raises:
         None
     '''
-    assert type in DataType
+    assert type in DataType, "Type must be an entry of 'DataType'"
 
     _val:Any = None
 

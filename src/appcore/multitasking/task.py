@@ -239,9 +239,9 @@ class Task():
         # Attributes
         self.id: str = id if id else str(uuid.uuid4())
         self.target: Callable | None = target
-        self.kwargs: BasicDict = kwargs
+        self.kwargs: BasicDict = kwargs if kwargs else {}
         self.stop_function: Callable | None = stop_function
-        self.stop_kwargs: BasicDict = stop_kwargs
+        self.stop_kwargs: BasicDict = stop_kwargs if stop_kwargs else {}
         self.restart: bool = restart
         self.runnable = False
 
@@ -476,7 +476,7 @@ class Task():
                 _exc_info = sys.exc_info()
                 if _exc_info:
                     if _exc_info[0]:
-                        _exception_name = _exc_info[0].__name__
+                        _exception_name = str(_exc_info[0].__name__)
                     if _exc_info[1]:
                         _exception_desc = str(_exc_info[1])
 

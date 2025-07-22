@@ -76,7 +76,8 @@ def entry_point(parent_process_task: Task | None = None):
     Raises:
         None
     '''
-    assert parent_process_task
+    assert parent_process_task, \
+            "A task represent the parent process must be provided"
 
     # Create a task dict here to store the tasks we are managing
     # Will be a subset of the tasks in MultiTasking
