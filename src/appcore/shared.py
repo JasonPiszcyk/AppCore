@@ -40,7 +40,7 @@ from typing import Any, Callable
 # Types
 #
 ###########################################################################
-type BasicDict = dict[str, Any]
+type KeywordDict = dict[str, Any]
 
 
 ###########################################################################

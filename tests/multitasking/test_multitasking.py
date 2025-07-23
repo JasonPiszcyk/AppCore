@@ -22,8 +22,11 @@ along with this program (See file: COPYING). If not, see
 # System Imports
 import pytest
 import time
-import appcore.multitasking as multitasking
-import appcore.multitasking.exception as exception
+# from appcore.multitasking import TaskManager
+from appcore.multitasking.task import TaskDefinition
+from appcore.multitasking.task import ProcessTaskDefinition
+from appcore.multitasking.task import ThreadTaskDefinition
+from multiprocessing import current_process, Manager
 
 #
 # Globals
@@ -47,6 +50,7 @@ EXCEPTION_DESC = "The exception description"
 # Simple task to end when an event is set
 #
 def simple_event_target(test_event=None):
+    debug('Waiting for event')
     assert test_event
     test_event.clear()
     test_event.wait()
@@ -70,300 +74,78 @@ def error_event_target(test_event=None):
 #
 ###########################################################################
 #
-# Test on the system itself
-#
-class Test_Task_System():
-
-    #
-    # Test on the mutitasking system control
-    #
-    def test_start_stop(self):
-        ''' Start and stop of the multitasking system '''
-        # Start
-        _mt = multitasking.start()
-
-        # Ensure the parent process, queue loop and watchdog tasks have started
-        assert _mt.parent_process_is_alive
-        assert _mt.queue_loop_is_alive
-        assert _mt.watchdog_is_alive
-
-        # Stop
-        multitasking.stop()
-
-        # Make sure the queue loop and watchdog threads have stopped
-        assert not _mt.parent_process_is_alive
-        assert not _mt.queue_loop_is_alive
-        assert not _mt.watchdog_is_alive
-
-
-#
 # Tasks as threads
 #
 class Test_Task_Threads():
     # Attributes for this set of tests
     id_prefix = "Test Task - Thread"
-    as_thread = True
+    task_type = "thread"
 
-    def test_simple_task(self, mt):
+    def test_task_simple(self):
         ''' Start/stop a task (as a thread) '''
-        # Make sure there are no tasks
-        assert len(mt.tasks) == 0
-        assert len(mt.running_tasks) == 0
-
+        TaskManager = Manager()
         # Add a task
         _kwargs = {
-            "test_event": mt.manager.Event()
+            "test_event": TaskManager.Event()
         }
 
-        _task_id = mt.task_add(
-            id = f"{self.__class__.id_prefix} - Simple",
+        _task = ThreadTaskDefinition(
+            name = f"{self.__class__.id_prefix} - Simple",
             target = simple_event_target,
             kwargs = _kwargs,
             stop_function = simple_event_stop,
             stop_kwargs = _kwargs,
-            restart = False,
-            as_thread = self.__class__.as_thread
         )
 
-        # Make sure the task is added but not running
-        assert len(mt.tasks) == 1
-        assert len(mt.running_tasks) == 0
-
         # Start the task
-        mt.task_start(_task_id)
+        _task.start()
+        time.sleep(1)
 
-        # Make sure the task is running
-        assert len(mt.tasks) == 1
-        assert len(mt.running_tasks) == 1
-
-        # Stop the task
-        mt.task_stop(_task_id)
-
-        # Make sure no tasks are running
-        assert len(mt.tasks) == 1
-        assert len(mt.running_tasks) == 0
-
-        # Delete the task
-        mt.task_delete(_task_id)
-
-        # Make sure there are no tasks
-        assert len(mt.tasks) == 0
-        assert len(mt.running_tasks) == 0
-
-        # Ensure the task is gone
-        with pytest.raises(exception.MultiTaskingTaskNotFoundError):
-            mt.task_start(_task_id)
-
-
-    def test_task_status_complete(self, mt):
-        ''' 
-        Run a task (as thread) successfully and check status at each stage
-        '''
-        # Add a task
-        _kwargs = {
-            "test_event": mt.manager.Event()
-        }
-
-        _task_id = mt.task_add(
-            id = f"{self.__class__.id_prefix} - Status - Complete",
-            target = simple_event_target,
-            kwargs = _kwargs,
-            stop_function = simple_event_stop,
-            stop_kwargs = _kwargs,
-            restart = False,
-            as_thread = self.__class__.as_thread
-        )
-
-        # class TaskStatus(enum.Enum):
-        #     NOT_STARTED     = "Not Started"
-        #     RUNNING         = "Running"
-        #     STOPPED         = "Stopped"
-        #     ERROR           = "Error"
-        #     COMPLETED       = "Completed"
-
-        assert mt.task_status(_task_id) == "Not Started"
-
-        # Start the task
-        mt.task_start(_task_id)
-        assert mt.task_status(_task_id) == "Running"
-
-        # Stop the task
-        mt.task_stop(_task_id)
-        assert mt.task_status(_task_id) == "Completed"
-
-       # Delete the task
-        mt.task_delete(_task_id)
-
-
-    def test_task_status_error(self, mt):
-        ''' 
-        Run a task (as thread) and have it error out
-        '''
-        # Add a task
-        _task_id = mt.task_add(
-            id = f"{self.__class__.id_prefix} - Status - Error",
-            target = error_event_target,
-            kwargs = None,
-            stop_function = None,
-            stop_kwargs = None,
-            restart = False,
-            as_thread = self.__class__.as_thread
-        )
-
-        assert mt.task_status(_task_id) == "Not Started"
-
-        # Start the task
-        mt.task_start(_task_id)
-
-        # Give the task a chance to run
-        time.sleep(0.2)
-        assert mt.task_status(_task_id) == "Error"
-
-        # Check the results
-        _results = mt.task_results(_task_id)
-        assert _results.status == "Error"
-        assert not _results.return_value
-        assert _results.exception_name == str(EXCEPTION.__name__)
-        assert _results.exception_desc == EXCEPTION_DESC
-        assert str(_results.exception_stack).find(
-                f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
-
-       # Delete the task
-        mt.task_delete(_task_id)
+         # Start the task
+        _task.stop()
 
 
 #
-# Tasks as process
+# Tasks as Processes
 #
-class Test_Task_Processes():
+class Test_Task_Process():
     # Attributes for this set of tests
     id_prefix = "Test Task - Process"
-    as_thread = False
+    task_type = "process"
 
-    def test_simple_task(self, mt):
+    def test_task_simple(self):
+        TaskManager = Manager()
+
         ''' Start/stop a task (as a process) '''
-        # Make sure there are no tasks
-        assert len(mt.tasks) == 0
-        assert len(mt.running_tasks) == 0
-
         # Add a task
         _kwargs = {
-            "test_event": mt.manager.Event()
+            "test_event": TaskManager.Event()
         }
 
-        # Add a task
-        _task_id = mt.task_add(
-            id = f"{self.__class__.id_prefix} - Simple",
+        _task = ProcessTaskDefinition(
+            name = f"{self.__class__.id_prefix} - Simple",
             target = simple_event_target,
             kwargs = _kwargs,
             stop_function = simple_event_stop,
             stop_kwargs = _kwargs,
-            restart = False,
-            as_thread = self.__class__.as_thread
         )
 
-        # Make sure the task is added but not running
-        assert len(mt.tasks) == 1
-        assert len(mt.running_tasks) == 0
-
         # Start the task
-        mt.task_start(_task_id)
+        _task.start()
+        time.sleep(2)
 
-        # Make sure the task is running
-        assert len(mt.tasks) == 1
-        assert len(mt.running_tasks) == 1
-
-        # Stop the task
-        mt.task_stop(_task_id)
-
-        # Make sure no tasks are running
-        assert len(mt.tasks) == 1
-        assert len(mt.running_tasks) == 0
-
-        # Delete the task
-        mt.task_delete(_task_id)
-
-        # Make sure there are no tasks
-        assert len(mt.tasks) == 0
-        assert len(mt.running_tasks) == 0
-
-        # Ensure the task is gone
-        with pytest.raises(exception.MultiTaskingTaskNotFoundError):
-            mt.task_start(_task_id)
+         # Start the task
+        _task.stop()
 
 
-    def test_task_status_complete(self, mt):
-        ''' 
-        Run a task (as process) successfully and check status at each stage
-        '''
-        # Add a task
-        _kwargs = {
-            "test_event": mt.manager.Event()
-        }
+###########################################################################
+#
+# In case this is run directly rather than imported...
+#
+###########################################################################
+'''
+Handle case of being run directly rather than imported
+'''
+if __name__ == "__main__":
+    pass
 
-        _task_id = mt.task_add(
-            id = f"{self.__class__.id_prefix} - Status - Complete",
-            target = simple_event_target,
-            kwargs = _kwargs,
-            stop_function = simple_event_stop,
-            stop_kwargs = _kwargs,
-            restart = False,
-            as_thread = self.__class__.as_thread
-        )
-
-        # class TaskStatus(enum.Enum):
-        #     NOT_STARTED     = "Not Started"
-        #     RUNNING         = "Running"
-        #     STOPPED         = "Stopped"
-        #     ERROR           = "Error"
-        #     COMPLETED       = "Completed"
-
-        assert mt.task_status(_task_id) == "Not Started"
-
-        # Start the task
-        mt.task_start(_task_id)
-        assert mt.task_status(_task_id) == "Running"
-
-        # Stop the task
-        mt.task_stop(_task_id)
-        assert mt.task_status(_task_id) == "Completed"
-
-       # Delete the task
-        mt.task_delete(_task_id)
-
-
-    def test_task_status_error(self, mt):
-        ''' 
-        Run a task (as thread) and have it error out
-        '''
-        # Add a task
-        _task_id = mt.task_add(
-            id = f"{self.__class__.id_prefix} - Status - Error",
-            target = error_event_target,
-            kwargs = None,
-            stop_function = None,
-            stop_kwargs = None,
-            restart = False,
-            as_thread = self.__class__.as_thread
-        )
-
-        assert mt.task_status(_task_id) == "Not Started"
-
-        # Start the task
-        mt.task_start(_task_id)
-
-        # Give the task a chance to run
-        time.sleep(0.2)
-        assert mt.task_status(_task_id) == "Error"
-
-        # Check the results
-        _results = mt.task_results(_task_id)
-        assert _results.status == "Error"
-        assert not _results.return_value
-        assert _results.exception_name == str(EXCEPTION.__name__)
-        assert _results.exception_desc == EXCEPTION_DESC
-        assert str(_results.exception_stack).find(
-                f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
-
-       # Delete the task
-        mt.task_delete(_task_id)

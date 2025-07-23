@@ -41,10 +41,10 @@ def pytest_configure(config):
 #
 # mt (multitasking object)
 #
-@pytest.fixture(scope="function")
-def mt():
-    _mt = multitasking.start()
+# @pytest.fixture(scope="function")
+# def mt():
+#     _mt = multitasking.start()
 
-    yield _mt
+#     yield _mt
 
-    multitasking.stop()
+#     multitasking.stop()

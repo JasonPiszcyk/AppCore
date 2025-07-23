@@ -19,12 +19,26 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
-
+import multiprocessing
 # What to import when 'import * from module'
-__all__ = [ "start", "stop", "refresh" ]
+# __all__ = [ "start", "stop", "refresh" ]
 
 
 # What to import as part of the the module (import module)
-from . import exception
-from .base import start, stop, refresh
+# from . import exception
+# from .base import start, stop, refresh
+
+# TaskManager = None
+
+###########################################################################
+#
+# In case this is run directly rather than imported...
+#
+###########################################################################
+'''
+Handle case of being run directly rather than imported
+'''
+if __name__ == "__main__":
+    # Create a Manager Object to handle sync resources
+    pass
 
