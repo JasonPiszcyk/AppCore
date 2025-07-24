@@ -22,7 +22,7 @@ along with this program (See file: COPYING). If not, see
 # System Imports
 import pytest
 from appcore.base import set_value
-from appcore.shared import DataType
+from appcore.typing import DataType
 
 
 #

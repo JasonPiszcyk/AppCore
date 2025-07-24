@@ -21,8 +21,7 @@ along with this program (See file: COPYING). If not, see
 '''
 
 import pytest
-import appcore.multitasking
-import appcore.multitasking as multitasking
+from appcore.multitasking.task_manager import TaskManager
 
 
 ###########################################################################
@@ -39,12 +38,8 @@ def pytest_configure(config):
 #
 ###########################################################################
 #
-# mt (multitasking object)
+# manager (multitasking maanger)
 #
-# @pytest.fixture(scope="function")
-# def mt():
-#     _mt = multitasking.start()
-
-#     yield _mt
-
-#     multitasking.stop()
+@pytest.fixture(scope="function")
+def manager():
+    return TaskManager()

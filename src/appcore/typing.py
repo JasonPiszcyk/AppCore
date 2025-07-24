@@ -32,7 +32,7 @@ import enum
 # Local app modules
 
 # Imports for python variable type hints
-from typing import Any, Callable
+from typing import Any
 
 
 ###########################################################################
@@ -40,7 +40,7 @@ from typing import Any, Callable
 # Types
 #
 ###########################################################################
-type KeywordDict = dict[str, Any]
+type KeywordDictType = dict[str, Any]
 
 
 ###########################################################################

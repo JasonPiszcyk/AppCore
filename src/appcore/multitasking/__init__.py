@@ -28,7 +28,6 @@ import multiprocessing
 # from . import exception
 # from .base import start, stop, refresh
 
-# TaskManager = None
 
 ###########################################################################
 #
@@ -39,6 +38,5 @@ import multiprocessing
 Handle case of being run directly rather than imported
 '''
 if __name__ == "__main__":
-    # Create a Manager Object to handle sync resources
     pass
 

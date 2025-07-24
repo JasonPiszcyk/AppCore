@@ -30,7 +30,7 @@ along with this program (See file: COPYING). If not, see
 import uuid
 
 # Local app modules
-from .shared import DataType
+from appcore.typing import DataType
 
 # Imports for python variable type hints
 from typing import Any

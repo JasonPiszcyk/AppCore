@@ -22,20 +22,13 @@ along with this program (See file: COPYING). If not, see
 # System Imports
 import pytest
 import time
-# from appcore.multitasking import TaskManager
-from appcore.multitasking.task import TaskDefinition
-from appcore.multitasking.task import ProcessTaskDefinition
-from appcore.multitasking.task import ThreadTaskDefinition
-from multiprocessing import current_process, Manager
+from appcore.multitasking.task_manager import TaskManager
+from multiprocessing import current_process
 
 #
 # Globals
 #
-
-def debug(msg):
-    with open("/tmp/jpp.txt", "at") as f:
-        f.write(f"{msg}\n")
-
+OUTPUT_FILE = "/tmp/test_multitasking.txt"
 
 EXCEPTION = RuntimeError
 EXCEPTION_DESC = "The exception description"
@@ -47,17 +40,27 @@ EXCEPTION_DESC = "The exception description"
 #
 ###########################################################################
 #
+# Write some log output to a file
+#
+def send_output(msg):
+    if OUTPUT_FILE:
+        with open(OUTPUT_FILE, "at") as f:
+            f.write(f"{msg}\n")
+
+
+#
 # Simple task to end when an event is set
 #
 def simple_event_target(test_event=None):
-    debug('Waiting for event')
     assert test_event
+    send_output(f'{current_process().name} -> Simple Event Target - Waiting')
     test_event.clear()
     test_event.wait()
 
 
 def simple_event_stop(test_event=None):
     assert test_event
+    send_output(f'{current_process().name} -> Simple Event Stop - Setting Event')
     test_event.set()
 
 
@@ -65,6 +68,7 @@ def simple_event_stop(test_event=None):
 # Task to generate an error
 #
 def error_event_target(test_event=None):
+    send_output(f'{current_process().name} -> Error Event Target - Raising exception')
     raise EXCEPTION(EXCEPTION_DESC)
 
 
@@ -81,15 +85,15 @@ class Test_Task_Threads():
     id_prefix = "Test Task - Thread"
     task_type = "thread"
 
-    def test_task_simple(self):
+    def test_task_simple(self, manager):
         ''' Start/stop a task (as a thread) '''
-        TaskManager = Manager()
+
         # Add a task
         _kwargs = {
-            "test_event": TaskManager.Event()
+            "test_event": manager.Event()
         }
 
-        _task = ThreadTaskDefinition(
+        _task = manager.Thread(
             name = f"{self.__class__.id_prefix} - Simple",
             target = simple_event_target,
             kwargs = _kwargs,
@@ -113,16 +117,14 @@ class Test_Task_Process():
     id_prefix = "Test Task - Process"
     task_type = "process"
 
-    def test_task_simple(self):
-        TaskManager = Manager()
-
+    def test_task_simple(self, manager):
         ''' Start/stop a task (as a process) '''
         # Add a task
         _kwargs = {
-            "test_event": TaskManager.Event()
+            "test_event": manager.Event()
         }
 
-        _task = ProcessTaskDefinition(
+        _task = manager.Process(
             name = f"{self.__class__.id_prefix} - Simple",
             target = simple_event_target,
             kwargs = _kwargs,
