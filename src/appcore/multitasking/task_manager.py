@@ -31,13 +31,29 @@ from multiprocessing import get_context
 from threading import Event
 
 # Local app modules
-from appcore.multitasking.task import Task, TaskType
+from appcore.multitasking.task import Task, TaskType, ContextType
 
 # Imports for python variable type hints
 from typing import Callable
 from multiprocessing.context import SpawnContext
 from multiprocessing.managers import SyncManager
+from threading import Lock, Barrier
 from appcore.typing import KeywordDictType
+
+# Logging
+from appcore.logging import configure_logger
+# log = configure_logger(
+#         name="TaskManager",
+#         log_file="/tmp/appcore.log",
+#         log_level="info",
+#         to_console=False
+# )
+log = configure_logger(
+        name="TaskManager",
+        log_file="/tmp/appcore.log",
+        log_level="debug",
+        to_console=False
+)
 
 
 ###########################################################################
@@ -108,6 +124,22 @@ class TaskManager():
     # Properties
     #
     ###########################################################################
+    #
+    # context
+    #
+    @property
+    def context(self) -> SpawnContext:
+        ''' The context used by the multiprocessing library '''
+        return self.__context
+
+
+    #
+    # manager
+    #
+    @property
+    def manager(self) -> SyncManager:
+        ''' The multiprocessing SyncManger instance to use '''
+        return self.__manager
 
 
     ###########################################################################
@@ -143,8 +175,11 @@ class TaskManager():
         Raises:
             None
         '''
+        log.debug(f"Creating thread ({name})")
         return Task(
             name=name,
+            context=self.__context,
+            manager=self.__manager,
             target=target,
             kwargs=kwargs,
             stop_function=stop_function,
@@ -181,8 +216,11 @@ class TaskManager():
         Raises:
             None
         '''
+        log.debug(f"Creating process ({name})")
         return Task(
             name=name,
+            context=self.__context,
+            manager=self.__manager,
             target=target,
             kwargs=kwargs,
             stop_function=stop_function,
@@ -196,7 +234,7 @@ class TaskManager():
     #
     def Event(self) -> Event:
         '''
-        Create a process based Task
+        Create an event (using the multiprocessing manager)
 
         Args:
             None
@@ -205,9 +243,63 @@ class TaskManager():
             None
 
         Raises:
+            Event
+        '''
+        log.debug(f"Creating event")
+        return self.__manager.Event()
+
+
+    #
+    # Lock
+    #
+    def Lock(self) -> Lock:
+        '''
+        Create a Lock (using the multiprocessing manager)
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            Lock
+        '''
+        log.debug(f"Creating lock")
+        return self.__manager.Lock()
+
+
+    #
+    # Barrier
+    #
+    def Barrier(
+            self,
+            parties: int = 2,
+            action: Callable | None = None,
+            timeout: float = 5.0
+    ) -> Barrier:
+        '''
+        Create a Barrier (using the multiprocessing manager)
+
+        Args:
+            parties (int): Number of parties required to wait before the
+                barrier is lifted
+            action (Callable): Function to be executed (by one of the
+                waiting parties) when the barrier is lifted
+            timeout (float): Time to wait for the barrier to be lifted
+
+        Returns:
+            Barrier
+
+        Raises:
             None
         '''
-        return self.__manager.Event()
+        log.debug(f"Creating barrier")
+        return self.__manager.Barrier(
+            parties=parties,
+            action=action,
+            timeout=timeout
+        )
 
 
 ###########################################################################

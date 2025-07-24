@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Constants
+Exception - Custom exceptions that can be raised by this module
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -27,69 +27,46 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-import enum
-import logging
 
 # Local app modules
 
 # Imports for python variable type hints
-from typing import Any
 
 
+###########################################################################
+#
+# Module Specific Items
+#
 ###########################################################################
 #
 # Types
 #
-###########################################################################
-type KeywordDictType = dict[str, Any]
+
+
+#
+# Constants
+#
+
+
+#
+# Global Variables
+#
 
 
 ###########################################################################
 #
-# Enums
+# Exceptions
 #
 ###########################################################################
-#
-# DataType
-#
-class DataType(enum.Enum):
-    INT             = "int"
-    INTEGER         = "integer"
-    STR             = "str"
-    STRING          = "string"
-    BOOL            = "bool"
-    BOOLEAN         = "boolean"
-    DICT            = "dict"
-    DICTIONARY      = "dictionary"
-    UUID1           = "uuid1"
-    UUID3           = "uuid3"
-    UUID4           = "uuid4"
-    UUID5           = "uuid5"
+class TaskIsRunningError(Exception):
+    ''' Task is already (or still) running '''
+    pass
 
 
-#
-# LoggingLevel
-#
-class LoggingLevel(enum.Enum):
-    CRITICAL        = "critical", logging.CRITICAL
-    FATAL           = "fatal", logging.CRITICAL
-    ERROR           = "error", logging.ERROR
-    WARNING         = "warning", logging.WARNING
-    WARN            = "warn", logging.WARNING
-    INFO            = "info", logging.INFO
-    DEBUG           = "debug", logging.DEBUG
-    NOTSET          = "notset", logging.NOTSET
+class TaskIsNotRunningError(Exception):
+    ''' Task is not running or start failed '''
+    pass
 
-    # Additional info
-    def __init__(self, value, level):
-        self._value_ = value
-        self.level = level
-
-    def __new__(cls, value, level):
-        obj = object.__new__(cls)
-        obj._value_ = value
-        obj.level = level
-        return obj
 
 
 ###########################################################################
@@ -102,4 +79,3 @@ Handle case of being run directly rather than imported
 '''
 if __name__ == "__main__":
     pass
-

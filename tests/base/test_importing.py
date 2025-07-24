@@ -83,5 +83,4 @@ class Test_Importing():
         exec(f"import {_module_name} as {_short_module_name}")
         self._check_module_imported(_module_name)
         self._check_module_attr(_short_module_name, DEFAULT_ATTR)
-        self._check_module_dict(_module_name, "start")
-        self._check_module_dict(_module_name, "stop")
+        self._check_module_dict(_module_name, "TaskManager")

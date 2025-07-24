@@ -103,7 +103,6 @@ class Test_Task_Threads():
 
         # Start the task
         _task.start()
-        time.sleep(1)
 
          # Start the task
         _task.stop()
@@ -134,7 +133,6 @@ class Test_Task_Process():
 
         # Start the task
         _task.start()
-        time.sleep(2)
 
          # Start the task
         _task.stop()

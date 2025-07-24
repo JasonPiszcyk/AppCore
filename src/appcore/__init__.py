@@ -24,5 +24,5 @@ along with this program (See file: COPYING). If not, see
 __all__ = [ "typing", "multitasking" ]
 
 # What to import as part of the the module (import module)
-from . import typing
-from . import multitasking
+from appcore import typing
+from appcore import multitasking
