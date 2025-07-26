@@ -45,16 +45,12 @@ from appcore.typing import KeywordDictType
 
 # Logging
 from appcore.logging import configure_logger
-# log = configure_logger(
-#         name="TaskManager",
-#         log_file="/tmp/appcore.log",
-#         log_level="info",
-#         to_console=False
-# )
+# _log_level = "info"
+_log_level = "debug"
 log = configure_logger(
         name="TaskManager",
         log_file="/tmp/appcore.log",
-        log_level="debug",
+        log_level=_log_level,
         to_console=False
 )
 
