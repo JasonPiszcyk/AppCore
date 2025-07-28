@@ -22,14 +22,12 @@ along with this program (See file: COPYING). If not, see
 # System Imports
 import pytest
 import time
-from appcore.multitasking.task_manager import TaskManager
 from multiprocessing import current_process
+from appcore.typing import TaskStatus
 
 #
 # Globals
 #
-OUTPUT_FILE = "/tmp/test_multitasking.txt"
-
 EXCEPTION = RuntimeError
 EXCEPTION_DESC = "The exception description"
 
@@ -40,35 +38,23 @@ EXCEPTION_DESC = "The exception description"
 #
 ###########################################################################
 #
-# Write some log output to a file
-#
-def send_output(msg):
-    if OUTPUT_FILE:
-        with open(OUTPUT_FILE, "at") as f:
-            f.write(f"{msg}\n")
-
-
-#
 # Simple task to end when an event is set
 #
 def simple_event_target(test_event=None):
     assert test_event
-    send_output(f'{current_process().name} -> Simple Event Target - Waiting')
     test_event.clear()
     test_event.wait()
 
 
 def simple_event_stop(test_event=None):
     assert test_event
-    send_output(f'{current_process().name} -> Simple Event Stop - Setting Event')
     test_event.set()
 
 
 #
 # Task to generate an error
 #
-def error_event_target(test_event=None):
-    send_output(f'{current_process().name} -> Error Event Target - Raising exception')
+def error_event_target():
     raise EXCEPTION(EXCEPTION_DESC)
 
 
@@ -108,6 +94,67 @@ class Test_Task_Threads():
         _task.stop()
 
 
+    def test_task_status_complete(self, manager):
+        ''' 
+        Run a task (as thread) successfully and check status at each stage
+        '''
+        # Add a task
+        _kwargs = {
+            "test_event": manager.Event()
+        }
+
+        _task = manager.Thread(
+            name = f"{self.__class__.id_prefix} - Status - Complete",
+            target = simple_event_target,
+            kwargs = _kwargs,
+            stop_function = simple_event_stop,
+            stop_kwargs = _kwargs,
+        )
+
+        assert _task.status == TaskStatus.NOT_STARTED.value
+
+        # Start the task
+        _task.start()
+        assert _task.status == TaskStatus.RUNNING.value
+
+        # Stop the task
+        _task.stop()
+        assert _task.status == TaskStatus.COMPLETED.value
+
+
+    def test_task_status_error(self, manager):
+        ''' 
+        Run a task (as thread) with an error and check status at each stage
+        '''
+        # Add a task
+        _kwargs = {
+            "test_event": manager.Event()
+        }
+
+        _task = manager.Thread(
+            name = f"{self.__class__.id_prefix} - Status - Error",
+            target = error_event_target,
+        )
+
+        assert _task.status == TaskStatus.NOT_STARTED.value
+
+        # Start the task
+        _task.start()
+
+        # Give the task a chance to run/error
+        time.sleep(0.2)
+        assert _task.status == TaskStatus.ERROR.value
+
+        # Check the results
+        _results = _task.results
+        assert _results.status == TaskStatus.ERROR.value
+        assert not _results.return_value
+        assert _results.exception_name == str(EXCEPTION.__name__)
+        assert _results.exception_desc == EXCEPTION_DESC
+        assert str(_results.exception_stack).find(
+                f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
+
+
 #
 # Tasks as Processes
 #
@@ -136,6 +183,67 @@ class Test_Task_Process():
 
          # Start the task
         _task.stop()
+
+
+    def test_task_status_complete(self, manager):
+        ''' 
+        Run a task (as process) successfully and check status at each stage
+        '''
+        # Add a task
+        _kwargs = {
+            "test_event": manager.Event()
+        }
+
+        _task = manager.Process(
+            name = f"{self.__class__.id_prefix} - Status - Complete",
+            target = simple_event_target,
+            kwargs = _kwargs,
+            stop_function = simple_event_stop,
+            stop_kwargs = _kwargs,
+        )
+
+        assert _task.status == TaskStatus.NOT_STARTED.value
+
+        # Start the task
+        _task.start()
+        assert _task.status == TaskStatus.RUNNING.value
+
+        # Stop the task
+        _task.stop()
+        assert _task.status == TaskStatus.COMPLETED.value
+
+
+    def test_task_status_error(self, manager):
+        ''' 
+        Run a task (as process) with an error and check status at each stage
+        '''
+        # Add a task
+        _kwargs = {
+            "test_event": manager.Event()
+        }
+
+        _task = manager.Process(
+            name = f"{self.__class__.id_prefix} - Status - Error",
+            target = error_event_target
+        )
+
+        assert _task.status == TaskStatus.NOT_STARTED.value
+
+        # Start the task
+        _task.start()
+
+        # Give the task a chance to run/error
+        time.sleep(0.2)
+        assert _task.status == TaskStatus.ERROR.value
+
+        # Check the results
+        _results = _task.results
+        assert _results.status == TaskStatus.ERROR.value
+        assert not _results.return_value
+        assert _results.exception_name == str(EXCEPTION.__name__)
+        assert _results.exception_desc == EXCEPTION_DESC
+        assert str(_results.exception_stack).find(
+                f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
 
 
 ###########################################################################

@@ -58,6 +58,11 @@ along with this program (See file: COPYING). If not, see
 # Exceptions
 #
 ###########################################################################
+class MultiTaskingManagerNotFoundError(Exception):
+    ''' The multiprocessing resource manager has not been configured '''
+    pass
+
+
 class TaskIsRunningError(Exception):
     ''' Task is already (or still) running '''
     pass
@@ -71,6 +76,18 @@ class TaskIsNotRunningError(Exception):
 class MultiTaskingQueueInvalidFormatError(Exception):
     ''' Invalid format for queue message '''
     pass
+
+
+class MultiTaskingQueueFrameExit(Exception):
+    ''' The queue frame contains the message exit Type '''
+    pass
+
+
+class MultiTaskingQueueFrameNotData(Exception):
+    ''' The queue frame is not a data frame (eg might be exit message) '''
+    pass
+
+
 
 
 

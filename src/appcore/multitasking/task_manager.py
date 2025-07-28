@@ -31,7 +31,8 @@ from multiprocessing import get_context
 from threading import Event
 
 # Local app modules
-from appcore.multitasking.task import Task, TaskType, ContextType
+from appcore.multitasking.task import Task, TaskType
+from appcore.multitasking.queue import Queue as TaskQueue
 
 # Imports for python variable type hints
 from typing import Callable
@@ -291,6 +292,26 @@ class TaskManager():
             action=action,
             timeout=timeout
         )
+
+
+    #
+    # Queue
+    #
+    def Queue(self) -> TaskQueue:
+        '''
+        Create a Lock (using the multiprocessing manager)
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            Lock
+        '''
+        log.debug(f"Creating queue")
+        return TaskQueue(manager=self.__manager, message_handler=None)
 
 
 ###########################################################################

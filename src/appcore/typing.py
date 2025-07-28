@@ -68,6 +68,17 @@ class DataType(enum.Enum):
 
 
 #
+# TaskStatus
+#
+class TaskStatus(enum.Enum):
+    UNKNOWN         = "Unknown"
+    NOT_STARTED     = "Not Started"
+    RUNNING         = "Running"
+    ERROR           = "Error"
+    COMPLETED       = "Completed"
+
+
+#
 # LoggingLevel
 #
 class LoggingLevel(enum.Enum):

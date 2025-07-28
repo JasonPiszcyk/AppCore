@@ -32,6 +32,8 @@ from multiprocessing import get_context, get_start_method
 from threading import Thread, BrokenBarrierError
 
 # Local app modules
+from appcore.typing import TaskStatus
+from appcore.multitasking.task_results import TaskResults
 from appcore.multitasking.task_wrapper import task_wrapper
 from appcore.multitasking import exception
 
@@ -92,7 +94,14 @@ class Task():
     processes or threads.
 
     Attributes:
-        None
+        name (str): An identifier for the task
+        target (Callable): Function to run in the new thread/process
+        kwargs (dict): Arguments to pass to the target function
+        stop_function (Callable): Function to run to stop the
+            thread/process
+        stop_kwargs (dict): Arguments to pass the stop function
+        status (str): The status of the task
+        results (TaskResults): The results of the class
     '''
     #
     # __init__
@@ -149,6 +158,15 @@ class Task():
         self.__start_barrier: Barrier | None = None
         self.__stop_barrier: Barrier | None = None
 
+        # Create the shared information dictionary
+        self.__info = self.__manager.dict()
+        self.__info["status"] = TaskStatus.NOT_STARTED.value
+        self.__info["results"] = self.__manager.dict()
+        self.__info["results"]["return_value"] = None
+        self.__info["results"]["exception_name"] = ""
+        self.__info["results"]["exception_desc"] = ""
+        self.__info["results"]["exception_stack"] = ""
+
         # Attributes
         self.name: str = name if name else str(uuid.uuid4())
         self.target: Callable | None = target
@@ -156,12 +174,42 @@ class Task():
         self.stop_function: Callable | None = stop_function
         self.stop_kwargs: KeywordDictType = stop_kwargs if stop_kwargs else {}
 
+        self._info = self.__manager.dict()
+
 
     ###########################################################################
     #
     # Properties
     #
     ###########################################################################
+    #
+    # status
+    #
+    @property
+    def status(self) -> str:
+        ''' The status of the task '''
+        if "status" in self.__info:
+            return self.__info["status"]
+        else:
+            return TaskStatus.UNKNOWN.value
+
+
+    #
+    # results
+    #
+    @property
+    def results(self) -> TaskResults:
+        ''' The results of the task '''
+        if not "results" in self.__info:
+            return TaskResults(status=self.status)
+
+        return TaskResults(
+            status=self.status,
+            return_value=self.__info["results"].get("return_value", None),
+            exception_name=self.__info["results"].get("exception_name", ""),
+            exception_desc=self.__info["results"].get("exception_desc", ""),
+            exception_stack=self.__info["results"].get("exception_stack", ""),
+        )
 
 
     ###########################################################################
@@ -201,8 +249,7 @@ class Task():
                 )
 
         if callable(self.target):
-            # self.__task_info["status"][self.id]["status"] = \
-            #     TaskStatus.RUNNING.value
+            self.__info["status"] = TaskStatus.RUNNING.value
 
             log.debug(f"Start: Task Type = {self.__task_type}")
 
@@ -210,6 +257,7 @@ class Task():
             _kwargs: KeywordDictType = {
                 "target": self.target,
                 "kwargs": self.kwargs,
+                "info": self.__info,
                 "start_barrier": self.__start_barrier,
                 "stop_barrier": self.__stop_barrier
             }
@@ -230,9 +278,6 @@ class Task():
                     name=self.name
                 )
                 self.__process.start()
-
-                # _task_info["pid"] = self.__process.pid
-                # time.sleep(PROCESS_STARTUP_DELAY)
 
 
             # When the process/thread is started, wait for the barrier
@@ -288,7 +333,8 @@ class Task():
                     except BrokenBarrierError:
                         self.__stop_barrier = None
                         raise exception.TaskIsNotRunningError(
-                            f"Timeout waiting for task to start (Name: {self.name})"
+                            "Timeout waiting for task to stop " +
+                                f"(Name: {self.name})"
                         )
 
 

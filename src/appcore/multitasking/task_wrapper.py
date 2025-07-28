@@ -33,6 +33,7 @@ import traceback
 from threading import BrokenBarrierError
 
 # Local app modules
+from appcore.typing import TaskStatus
 
 # Imports for python variable type hints
 from typing import Any, Callable
@@ -84,6 +85,7 @@ BARRIER_WAIT_TIMEOUT: float = 0.5
 def task_wrapper(
         target: Callable | None = None,
         kwargs: KeywordDictType = {},
+        info: dict = {},
         start_barrier: Barrier | None = None,
         stop_barrier: Barrier | None = None
 ) -> None:
@@ -93,6 +95,7 @@ def task_wrapper(
     Args:
         target (Callable): Function to run in the new thread/process
         kwargs (dict): Arguments to pass the target function
+        info (dict): The SyncManager dict object to stored results and status
         start_barrier (Barrier): Barrier to wait on to allow sync with caller
             during task startup
         stop_barrier (Barrier): Barrier to wait on to allow sync with caller
@@ -126,15 +129,11 @@ def task_wrapper(
         # Run the target, capturing any exceptions and the return value
         try:
             _return_value = target(**kwargs)
-            # self.__task_info["status"][self.id]["status"] = \
-            #     TaskStatus.COMPLETED.value
-            # self.__task_info["status"][self.id]["is_alive"] = False
+            info["status"]= TaskStatus.COMPLETED.value
             log.debug(f"Task finished OK: {str(target)}")
 
         except Exception:
-            # self.__task_info["status"][self.id]["status"] = \
-            #     TaskStatus.ERROR.value
-            # self.__task_info["status"][self.id]["is_alive"] = False
+            info["status"]= TaskStatus.ERROR.value
             _exception_stack = traceback.format_exc()
             log.debug(f"Task FAILED: {str(target)}")
             log.debug(_exception_stack)
@@ -147,16 +146,16 @@ def task_wrapper(
                     _exception_desc = str(_exc_info[1])
 
     # Set the return Value
-    # _results = self.__task_info["results"][self.id]
-    # _results["return_value"] = _return_value
-    # _results["exception_name"] = _exception_name
-    # _results["exception_desc"] = _exception_desc
-    # _results["exception_stack"] = _exception_stack
+    if "results" in info:
+        info["results"]["return_value"] = _return_value
+        info["results"]["exception_name"] = _exception_name
+        info["results"]["exception_desc"] = _exception_desc
+        info["results"]["exception_stack"] = _exception_stack
 
     if stop_barrier:
         try:
             stop_barrier.wait(timeout=BARRIER_WAIT_TIMEOUT)
-        except BrokenBarrierError:
+        except BrokenBarrierError, EOFError:
             # Ignore this - The other process/thread should be waiting
             # (and this is to let the caller know we are done)
             pass

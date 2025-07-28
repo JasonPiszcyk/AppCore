@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Basic Queue - Extension of queue class to implement a frame around data
+Basic Queue - A queue class to implement a frame around data
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -27,7 +27,7 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-from queue import Queue
+# from queue import Queue
 from queue import Empty as QueueEmpty
 
 # Local app modules
@@ -35,7 +35,8 @@ from appcore.multitasking._message_frame import _MessageFrame, _MessageType
 import appcore.multitasking.exception as exception
 
 # Imports for python variable type hints
-from typing import Any
+from typing import Any, Callable
+from multiprocessing.managers import SyncManager
 
 # Logging
 from appcore.logging import configure_logger
@@ -71,45 +72,52 @@ log = configure_logger(
 
 ###########################################################################
 #
-# Queue Class Definition
+# _BasicQueue Class Definition
 #
 ###########################################################################
-class _BasicQueue(Queue):
+class _BasicQueue():
     '''
-    Class to describe the TaskManager.
-
-    The TaskManager is used to create any required multitasking resources
+    Class to describe a basic queue.
 
     Attributes:
         None
     '''
-
     #
     # __init__
     #
     def __init__(
             self,
-            *args,
-            **kwargs
+            manager: SyncManager | None = None,
+            frame_handler: Callable | None = None,
     ):
         '''
         Initialises the instance.
 
         Args:
-            *args (Undef): Unnamed arguments to be passed to the constructor
-                of the inherited process
-            **kwargs (Undef): Keyword arguments to be passed to the constructor
-                of the inherited process
+            manager (SyncManager): An instance of the SyncManager class to
+                provision the queue
+            frame_handler (Callable): Callable to process the received
+                frame. Takes 1 parameter - an instance of _MessageFrame
 
         Returns:
             None
 
         Raises:
-            None
+            MultiTaskingManagerNotFoundError
+                when the multiprocessing manager instance is not found
         '''
-        super().__init__(*args, **kwargs)
-
         # Private Attributes
+        if manager:
+            self._manager: SyncManager = manager
+        else:
+            raise exception.MultiTaskingManagerNotFoundError
+
+        self._queue = self._manager.Queue()
+
+        if callable(frame_handler):
+            self._frame_handler: Callable | None = frame_handler
+        else:
+            self._frame_handler: Callable | None = None
 
         # Attributes
 
@@ -147,21 +155,36 @@ class _BasicQueue(Queue):
 
         Raises:
             MultiTaskingQueueInvalidFormatError:
-                When an incorrectly formatted message is received 
+                When an incorrectly formatted message is received
+            MultiTaskingQueueFrameExit:
+                When the queue recieves an exit message frame
+            MultiTaskingQueueFrameNotData:
+                When the queue receives a frame that is not data.  For example
+                the exit message.
         '''
         # Get a message from the queue
         try:
-            _msg = super().get(block=block, timeout=timeout)
+            _frame = self._queue.get(block=block, timeout=timeout)
         except QueueEmpty:
             return None
 
         # Confirm the message is in the correct format
-        if not isinstance(_msg, _MessageFrame):
+        if not isinstance(_frame, _MessageFrame):
             raise exception.MultiTaskingQueueInvalidFormatError(
                 "Get - Message format is incorrect"
             )
 
-        return _msg.data
+        if _frame.message_type == _MessageType.EXIT:
+            raise exception.MultiTaskingQueueFrameExit
+
+        if callable(self._frame_handler):
+            self._frame_handler(_frame)
+
+        if _frame.message_type == _MessageType.DATA:
+            return _frame.data
+
+        # The frame type is not data, so no further processing should occur
+        raise exception.MultiTaskingQueueFrameNotData
 
 
     #
@@ -177,7 +200,10 @@ class _BasicQueue(Queue):
         Put a message on the queue
 
         Args:
-            data (Any): The data to be sent
+            item (Any): The data to be sent
+            block (bool): If True block until message place on queue. If false,
+                return immediately
+            timeout: Time (in seconds) to wait before returning
         
         Returns:
             None
@@ -188,7 +214,39 @@ class _BasicQueue(Queue):
         _frame = _MessageFrame(message_type=_MessageType.DATA, data=item)
 
         # Put a message on the queue
-        super().put(_frame, block=block, timeout=timeout)
+        self._queue.put(_frame, block=block, timeout=timeout)
+
+
+    #
+    # put_action
+    #
+    def put_action(
+            self,
+            item: Any = None,
+            block: bool = True,
+            timeout: float | None = None,
+            message_type: _MessageType = _MessageType.EMPTY,
+    ):
+        '''
+        Put a message on the queue
+
+        Args:
+            item (Any): The data to be sent
+            block (bool): If True block until message place on queue. If false,
+                return immediately
+            timeout: Time (in seconds) to wait before returning
+            message_type (_MessageType): The type of message being sent
+        
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        _frame = _MessageFrame(message_type=message_type, data=item)
+
+        # Put a message on the queue
+        self._queue.put(_frame, block=block, timeout=timeout)
 
 
     #
@@ -210,7 +268,7 @@ class _BasicQueue(Queue):
         _queue_not_empty = True
         while _queue_not_empty:
             try:
-                _ = super().get(block=False)
+                _ = self._queue.get(block=False)
             except QueueEmpty:
                 _queue_not_empty = False
 

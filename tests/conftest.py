@@ -38,8 +38,8 @@ def pytest_configure(config):
 #
 ###########################################################################
 #
-# manager (multitasking maanger)
+# manager (multitasking manager)
 #
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def manager():
     return TaskManager()
