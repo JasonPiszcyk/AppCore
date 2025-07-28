@@ -92,6 +92,7 @@ class Queue(_BasicQueue):
             self,
             *args,
             message_handler: Callable | None = None,
+            stop_barrier: Barrier | None = None,
             **kwargs
     ):
         '''
@@ -116,9 +117,13 @@ class Queue(_BasicQueue):
 
         # Private Attributes
         self._listener_running = False
-        self._stop_barrier: Barrier = self._manager.Barrier(
-                parties=2, action=None, timeout=LISTENER_SHUTDOWN_TIMEOUT
-        )
+
+        if not stop_barrier:
+            raise exception.MultiTaskingBarrierNotFoundError(
+                "Stop barrier missing from Queue instatiation"
+            )
+
+        self._stop_barrier = stop_barrier
 
         if callable(message_handler):
             self._message_handler: Callable | None = message_handler

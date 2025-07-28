@@ -63,6 +63,16 @@ class MultiTaskingManagerNotFoundError(Exception):
     pass
 
 
+class MultiTaskingQueueNotFoundError(Exception):
+    ''' A queue instance canot be found '''
+    pass
+
+
+class MultiTaskingBarrierNotFoundError(Exception):
+    ''' A barrier instance canot be found '''
+    pass
+
+
 class TaskIsRunningError(Exception):
     ''' Task is already (or still) running '''
     pass

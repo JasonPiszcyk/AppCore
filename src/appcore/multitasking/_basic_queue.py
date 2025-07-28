@@ -36,7 +36,7 @@ import appcore.multitasking.exception as exception
 
 # Imports for python variable type hints
 from typing import Any, Callable
-from multiprocessing.managers import SyncManager
+from queue import Queue as QueueType
 
 # Logging
 from appcore.logging import configure_logger
@@ -87,15 +87,14 @@ class _BasicQueue():
     #
     def __init__(
             self,
-            manager: SyncManager | None = None,
+            queue: QueueType | None = None,
             frame_handler: Callable | None = None,
     ):
         '''
         Initialises the instance.
 
         Args:
-            manager (SyncManager): An instance of the SyncManager class to
-                provision the queue
+            queue (Queue): An instance of a SyncManager queue
             frame_handler (Callable): Callable to process the received
                 frame. Takes 1 parameter - an instance of _MessageFrame
 
@@ -103,16 +102,16 @@ class _BasicQueue():
             None
 
         Raises:
-            MultiTaskingManagerNotFoundError
-                when the multiprocessing manager instance is not found
+            MultiTaskingQueueNotFoundError
+                when a SyncManager queue is not passed to the constructor
         '''
         # Private Attributes
-        if manager:
-            self._manager: SyncManager = manager
-        else:
-            raise exception.MultiTaskingManagerNotFoundError
+        if not queue:
+            raise exception.MultiTaskingQueueNotFoundError(
+                "Queue instance missing from queue instantiation"
+            )
 
-        self._queue = self._manager.Queue()
+        self._queue = queue
 
         if callable(frame_handler):
             self._frame_handler: Callable | None = frame_handler

@@ -66,7 +66,7 @@ log = configure_logger(
 #
 # Constants
 #
-
+DEFAULT_BARRIER_TIMEOUT: float = 5.0
 
 #
 # Global Variables
@@ -297,12 +297,17 @@ class TaskManager():
     #
     # Queue
     #
-    def Queue(self) -> TaskQueue:
+    def Queue(
+            self,
+            message_handler: Callable | None = None
+    ) -> TaskQueue:
         '''
-        Create a Lock (using the multiprocessing manager)
+        Create a Queue (using the multiprocessing manager)
 
         Args:
-            None
+            message_handler (Callable): Callable to process the received
+                message. Takes 1 parameter of type Any which is the data
+                contained in the frame.
 
         Returns:
             None
@@ -311,7 +316,13 @@ class TaskManager():
             Lock
         '''
         log.debug(f"Creating queue")
-        return TaskQueue(manager=self.__manager, message_handler=None)
+        return TaskQueue(
+            queue=self.__manager.Queue(),
+            stop_barrier=self.__manager.Barrier(
+                parties=2, action=None, timeout=DEFAULT_BARRIER_TIMEOUT
+            ),
+            message_handler=message_handler
+        )
 
 
 ###########################################################################
