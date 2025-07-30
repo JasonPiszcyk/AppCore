@@ -19,12 +19,25 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+# Configure logging for the module
+from appcore.logging import configure_logger
+# _log_level = "info"
+_log_level = "debug"
+LOG = configure_logger(
+        name="TaskManager",
+        log_file="/tmp/appcore.log",
+        log_level=_log_level,
+        to_console=False
+)
+
 # What to import when 'import * from module'
 __all__ = [ "TaskManager", ]
 
 
 # What to import as part of the the module (import module)
 from appcore.multitasking.task_manager import TaskManager
+
+
 
 
 ###########################################################################

@@ -26,6 +26,7 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking import LOG
 
 # System Modules
 import sys
@@ -39,17 +40,6 @@ from appcore.typing import TaskStatus
 from typing import Any, Callable
 from threading import Barrier
 from appcore.typing import KeywordDictType
-
-# Logging
-from appcore.logging import configure_logger
-# _log_level = "info"
-_log_level = "debug"
-log = configure_logger(
-        name="TaskManager",
-        log_file="/tmp/appcore.log",
-        log_level=_log_level,
-        to_console=False
-)
 
 
 ###########################################################################
@@ -107,7 +97,7 @@ def task_wrapper(
     Raises:
         None
     '''
-    log.debug(f"Running Task: {str(target)}")
+    LOG.debug(f"Running Task: {str(target)}")
 
     # Got here - so let the caller know the task has started
     if start_barrier:
@@ -130,13 +120,13 @@ def task_wrapper(
         try:
             _return_value = target(**kwargs)
             info["status"]= TaskStatus.COMPLETED.value
-            log.debug(f"Task finished OK: {str(target)}")
+            LOG.debug(f"Task finished OK: {str(target)}")
 
         except Exception:
             info["status"]= TaskStatus.ERROR.value
             _exception_stack = traceback.format_exc()
-            log.debug(f"Task FAILED: {str(target)}")
-            log.debug(_exception_stack)
+            LOG.debug(f"Task FAILED: {str(target)}")
+            LOG.debug(_exception_stack)
 
             _exc_info = sys.exc_info()
             if _exc_info:

@@ -25,6 +25,7 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking import LOG
 
 # System Modules
 import uuid
@@ -44,17 +45,6 @@ from multiprocessing.context import SpawnContext, DefaultContext, SpawnProcess
 from multiprocessing.managers import SyncManager
 from threading import Barrier
 from appcore.typing import KeywordDictType
-
-# Logging
-from appcore.logging import configure_logger
-# _log_level = "info"
-_log_level = "debug"
-log = configure_logger(
-        name="TaskManager",
-        log_file="/tmp/appcore.log",
-        log_level=_log_level,
-        to_console=False
-)
 
 
 ##########################################################################
@@ -234,7 +224,7 @@ class Task():
             TaskIsNotRunningError:
                 When startup of the task does not complete successfully
         '''
-        log.debug(f"Multiprocessing Start Method: {str(get_start_method())}")
+        LOG.debug(f"Multiprocessing Start Method: {str(get_start_method())}")
 
         # Create a barrier to sync when the task is started
         if not self.__start_barrier:
@@ -251,7 +241,7 @@ class Task():
         if callable(self.target):
             self.__info["status"] = TaskStatus.RUNNING.value
 
-            log.debug(f"Start: Task Type = {self.__task_type}")
+            LOG.debug(f"Start: Task Type = {self.__task_type}")
 
             # Wrap the target functions to gather information
             _kwargs: KeywordDictType = {
@@ -328,7 +318,7 @@ class Task():
                     # When the process/thread is stopped, wait for the barrier
                     # (set in the task_wrapper)
                     try:
-                        log.debug(f"Stop: Waiting at Barrier for Thread")
+                        LOG.debug(f"Stop: Waiting at Barrier for Thread")
                         self.__stop_barrier.wait(timeout=TASK_STOP_TIMEOUT)
                     except BrokenBarrierError:
                         self.__stop_barrier = None
@@ -367,7 +357,7 @@ class Task():
                     # When the process/thread is stopped, wait for the barrier
                     # (set in the task_wrapper)
                     try:
-                        log.debug(f"Stop: Waiting at Barrier for Process")
+                        LOG.debug(f"Stop: Waiting at Barrier for Process")
                         self.__stop_barrier.wait(timeout=TASK_STOP_TIMEOUT)
                     except BrokenBarrierError:
                         self.__stop_barrier = None

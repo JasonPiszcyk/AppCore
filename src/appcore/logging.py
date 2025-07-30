@@ -67,7 +67,7 @@ from appcore.typing import LoggingLevel
 #
 def configure_logger(
         name: str = "",
-        log_level: str = "warning",
+        log_level: str = "info",
         log_file: str = "",
         to_console: bool = True,
 ) -> Logger:
@@ -76,7 +76,8 @@ def configure_logger(
 
     Args:
         name (str): A label for the logger
-        log_file (str): Path to file to log to.  If not set, will not log
+        log_level (str): The log level to use when configuring logging
+        log_file (str): Path of file to log to.  If not set, will not log
             to file
         to_console (bool): Write the logging out to the standard output 
             device (usually stdout)
@@ -136,8 +137,6 @@ def configure_logger(
         _logger.addHandler(_log_handler)
 
     return _logger
-
-
 
 
 ###########################################################################

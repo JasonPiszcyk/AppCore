@@ -25,6 +25,7 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking import LOG
 
 # System Modules
 import enum
@@ -35,17 +36,6 @@ from appcore.multitasking import exception
 
 # Imports for python variable type hints
 from typing import Any
-
-# Logging
-from appcore.logging import configure_logger
-# _log_level = "info"
-_log_level = "debug"
-log = configure_logger(
-        name="TaskManager",
-        log_file="/tmp/appcore.log",
-        log_level=_log_level,
-        to_console=False
-)
 
 
 ###########################################################################

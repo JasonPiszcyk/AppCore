@@ -275,6 +275,30 @@ class Test_Queue_Query_Response():
         _task.stop()
 
 
+    def test_query_error(self, manager):
+        ''' Test a Query/Response - Error'''
+        _query_string = str(datetime.today())
+
+        query_q = manager.Queue(message_handler=query_handler_string)
+        response_q = manager.Queue()
+
+        # Create a thread for the listener
+        _kwargs = {
+            "queue": query_q
+        }
+
+        # Send the query without the response queue
+        with pytest.raises(exception.MultiTaskingQueueNotFoundError):
+            _ = query_q.query(_query_string)
+
+        # Send the query with the response queue set to None
+        with pytest.raises(exception.MultiTaskingQueueNotFoundError):
+            _ = query_q.query(_query_string, response_queue=None)
+
+        # Send the query with the response queue set to a string
+        with pytest.raises(AssertionError, match="Response Queue is not valid"):
+            _ = query_q.query(_query_string, response_queue="A_queue")
+
 
 ###########################################################################
 #

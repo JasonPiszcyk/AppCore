@@ -25,6 +25,7 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
+from appcore.multitasking import LOG
 
 # System Modules
 from multiprocessing import get_context
@@ -40,17 +41,6 @@ from multiprocessing.context import SpawnContext
 from multiprocessing.managers import SyncManager
 from threading import Lock, Barrier
 from appcore.typing import KeywordDictType
-
-# Logging
-from appcore.logging import configure_logger
-# _log_level = "info"
-_log_level = "debug"
-log = configure_logger(
-        name="TaskManager",
-        log_file="/tmp/appcore.log",
-        log_level=_log_level,
-        to_console=False
-)
 
 
 ###########################################################################
@@ -91,7 +81,9 @@ class TaskManager():
     #
     # __init__
     #
-    def __init__(self):
+    def __init__(
+            self,
+    ):
         '''
         Initialises the instance.
 
@@ -109,6 +101,7 @@ class TaskManager():
         self.__manager: SyncManager = self.__context.Manager()
 
         # Attributes
+
 
 
     ###########################################################################
@@ -167,7 +160,7 @@ class TaskManager():
         Raises:
             None
         '''
-        log.debug(f"Creating thread ({name})")
+        LOG.debug(f"Creating thread ({name})")
         return Task(
             name=name,
             context=self.__context,
@@ -208,7 +201,7 @@ class TaskManager():
         Raises:
             None
         '''
-        log.debug(f"Creating process ({name})")
+        LOG.debug(f"Creating process ({name})")
         return Task(
             name=name,
             context=self.__context,
@@ -237,7 +230,7 @@ class TaskManager():
         Raises:
             Event
         '''
-        log.debug(f"Creating event")
+        LOG.debug(f"Creating event")
         return self.__manager.Event()
 
 
@@ -257,7 +250,7 @@ class TaskManager():
         Raises:
             Lock
         '''
-        log.debug(f"Creating lock")
+        LOG.debug(f"Creating lock")
         return self.__manager.Lock()
 
 
@@ -286,7 +279,7 @@ class TaskManager():
         Raises:
             None
         '''
-        log.debug(f"Creating barrier")
+        LOG.debug(f"Creating barrier")
         return self.__manager.Barrier(
             parties=parties,
             action=action,
@@ -318,7 +311,7 @@ class TaskManager():
         Raises:
             Lock
         '''
-        log.debug(f"Creating queue")
+        LOG.debug(f"Creating queue")
         return TaskQueue(
             queue=self.__manager.Queue(),
             stop_barrier=self.__manager.Barrier(
