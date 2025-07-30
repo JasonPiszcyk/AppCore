@@ -32,7 +32,7 @@ from threading import Event
 
 # Local app modules
 from appcore.multitasking.task import Task, TaskType
-from appcore.multitasking.queue import Queue as TaskQueue
+from appcore.multitasking.task_queue import TaskQueue
 
 # Imports for python variable type hints
 from typing import Callable

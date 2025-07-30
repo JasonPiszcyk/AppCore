@@ -140,7 +140,7 @@ class MessageFrameProperties():
     and modified via an instance of this class
 
     Attributes:
-        response_queue (Queue): The queue to send the response to
+        response_queue (TaskQueue): The queue to send the response to
         message_id (str): An ID for the message (UUID will be generated if
             empty)
         session_id (str): The message can be related to other messages
@@ -160,7 +160,7 @@ class MessageFrameProperties():
         Initializes the instance.
 
         Args:
-            response_queue (Queue): The queue to send the response to
+            response_queue (TaskQueue): The queue to send the response to
             message_id (str): An ID for the message (UUID will be generated if
                 empty)
             session_id (str): The message can be related to other messages

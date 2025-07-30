@@ -61,7 +61,7 @@ def stop_queue_listener(queue=None):
 #
 # Message handler that raises an exception if the message isn't correct
 #
-def message_handler(msg):
+def message_handler(msg, props):
     if msg != BASIC_TEXT:
         raise EXCEPTION(EXCEPTION_DESC)
 
@@ -80,19 +80,19 @@ class Test_Basic_Queue():
         q = manager.Queue()
 
         q.put(BASIC_TEXT)
-        _msg = q.get()
+        _msg = q.get_data()
         assert _msg == BASIC_TEXT
 
         q.put(BASIC_DICT)
-        _msg = q.get()
+        _msg = q.get_data()
         assert _msg == BASIC_DICT
 
 
-    def test_put_action(self, manager):
-        ''' Test put_action '''
+    def test_put_type_exit(self, manager):
+        ''' Test put_type with type of 'EXIT' '''
         q = manager.Queue()
 
-        q.put_action(message_type=_MessageType.EXIT)
+        q._put_type(message_type=_MessageType.EXIT)
         with pytest.raises(exception.MultiTaskingQueueFrameExit):
             _ = q.get()
 

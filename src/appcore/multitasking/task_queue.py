@@ -27,7 +27,7 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-from queue import Empty as QueueEmpty
+import queue
 
 # Local app modules
 from appcore.multitasking._message_frame import _MessageFrame, _MessageType
@@ -94,7 +94,7 @@ class TaskQueue():
     #
     def __init__(
             self,
-            queue: TaskQueue | None = None,
+            queue: queue.Queue | None = None,
             frame_handler: Callable | None = None,
             message_handler: Callable | None = None,
             stop_barrier: Barrier | None = None,
@@ -109,7 +109,7 @@ class TaskQueue():
             message_handler (Callable): Callable to process the received
                 message. The message handler should accept 2 parameters:
                     The message
-                    A queue to respond to (if None then no response)
+                    Prpoerties (an instance of MessageFrameProperties)
 
         Returns:
             None
@@ -125,7 +125,7 @@ class TaskQueue():
                 "Queue instance missing from queue instantiation"
             )
 
-        self.__queue: TaskQueue = queue
+        self.__queue: queue.Queue = queue
 
         if callable(frame_handler):
             self.__frame_handler: Callable | None = frame_handler
@@ -163,9 +163,79 @@ class TaskQueue():
 
     ###########################################################################
     #
-    # Methods
+    # Queuing methods
     #
     ###########################################################################
+    #
+    # _put_type
+    #
+    def _put_type(
+            self,
+            message_type: _MessageType = _MessageType.EMPTY,
+            item: Any = None,
+            block: bool = True,
+            timeout: float | None = None,
+            response_queue: TaskQueue | None = None,
+            message_id: str = "",
+            session_id: str = ""
+    ):
+        '''
+        Put a message on the queue with the specified type
+
+        Args:
+            message_type (_MessageType): The type of message being sent
+            item (Any): The data to be sent
+            block (bool): If True block until message is placed on queue. If 
+                false, return immediately
+            timeout: Time (in seconds) to wait before returning
+            response_queue (Queue): The queue to send the response to
+            message_id (str): An ID for the message (UUID will be generated if
+                empty)
+            session_id (str): The message can be related to other messages
+                via this ID
+        
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        _frame = _MessageFrame(message_type=message_type, data=item)
+
+        # Set Properties
+        _frame.properties.response_queue = response_queue
+        _frame.properties.message_id = message_id
+        _frame.properties.session_id = session_id
+
+        # Put a message on the queue
+        self.__queue.put(_frame, block=block, timeout=timeout)
+
+
+    #
+    # put
+    #
+    def put(
+            self,
+            item,
+            **kwargs
+    ):
+        '''
+        Wrapper for _put_type specifying a type of 'DATA'
+
+        Args:
+            item: Allow item to be spicified as a positional arg
+            kwargs: Keyword arguments to be passed to _put_type
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        # Put a message on the queue with a type of 'DATA'
+        self._put_type(item=item, message_type=_MessageType.DATA, **kwargs)
+
+
     #
     # get
     #
@@ -197,7 +267,7 @@ class TaskQueue():
         # Get a message from the queue
         try:
             _frame = self.__queue.get(block=block, timeout=timeout)
-        except QueueEmpty:
+        except queue.Empty:
             return None, None
 
         # Confirm the message is in the correct format
@@ -249,81 +319,6 @@ class TaskQueue():
 
 
     #
-    # put
-    #
-    def put(
-            self,
-            item: Any = None,
-            block: bool = True,
-            timeout: float | None = None,
-            response_queue: TaskQueue | None = None,
-            message_id: str = "",
-            session_id: str = ""
-    ):
-        '''
-        Put a message on the queue
-
-        Args:
-            item (Any): The data to be sent
-            block (bool): If True block until message place on queue. If false,
-                return immediately
-            timeout: Time (in seconds) to wait before returning
-            response_queue (Queue): The queue to send the response to
-            message_id (str): An ID for the message (UUID will be generated if
-                empty)
-            session_id (str): The message can be related to other messages
-                via this ID
-        
-        Returns:
-            None
-
-        Raises:
-            None
-        '''
-        _frame = _MessageFrame(message_type=_MessageType.DATA, data=item)
-
-        # Set Properties
-        _frame.properties.response_queue = response_queue
-        _frame.properties.message_id = message_id
-        _frame.properties.session_id = session_id
-
-        # Put a message on the queue
-        self.__queue.put(_frame, block=block, timeout=timeout)
-
-
-    #
-    # put_action
-    #
-    def put_action(
-            self,
-            item: Any = None,
-            block: bool = True,
-            timeout: float | None = None,
-            message_type: _MessageType = _MessageType.EMPTY,
-    ):
-        '''
-        Put a message on the queue
-
-        Args:
-            item (Any): The data to be sent
-            block (bool): If True block until message place on queue. If false,
-                return immediately
-            timeout: Time (in seconds) to wait before returning
-            message_type (_MessageType): The type of message being sent
-        
-        Returns:
-            None
-
-        Raises:
-            None
-        '''
-        _frame = _MessageFrame(message_type=message_type, data=item)
-
-        # Put a message on the queue
-        self.__queue.put(_frame, block=block, timeout=timeout)
-
-
-    #
     # cleanup
     #
     def cleanup(self):
@@ -343,13 +338,13 @@ class TaskQueue():
         while _queue_not_empty:
             try:
                 _, _ = self.__queue.get(block=False)
-            except QueueEmpty:
+            except queue.Empty:
                 _queue_not_empty = False
 
 
     ###########################################################################
     #
-    # Methods
+    # Processing Methods
     #
     ###########################################################################
     #
@@ -374,7 +369,7 @@ class TaskQueue():
         self.__listener_running = True
         while self.__listener_running:
             try:
-                _msg = self.get()
+                _msg, _props = self.get()
 
             except exception.MultiTaskingQueueFrameExit:
                 # The exit message frame was received
@@ -387,7 +382,7 @@ class TaskQueue():
 
             # Process the data
             if callable(self._message_handler):
-                self._message_handler(_msg)
+                self._message_handler(_msg, _props)
 
         # If the stop_barrier is set, notify it
         if self.__stop_barrier:
@@ -421,7 +416,7 @@ class TaskQueue():
         '''
         if remote or self.__listener_running:
             # Put an EXIT message on the queue
-            self.put_action(message_type=_MessageType.EXIT)
+            self._put_type(message_type=_MessageType.EXIT)
 
             # If the stop_barrier is set, notify it
             if self.__stop_barrier:
