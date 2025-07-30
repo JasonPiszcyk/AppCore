@@ -28,10 +28,10 @@ along with this program (See file: COPYING). If not, see
 
 # System Modules
 import queue
+import uuid
 
 # Local app modules
 from appcore.multitasking._message_frame import _MessageFrame, _MessageType
-from appcore.multitasking._message_frame import MessageFrameProperties
 
 import appcore.multitasking.exception as exception
 from threading import Barrier, BrokenBarrierError
@@ -95,7 +95,6 @@ class TaskQueue():
     def __init__(
             self,
             queue: queue.Queue | None = None,
-            frame_handler: Callable | None = None,
             message_handler: Callable | None = None,
             stop_barrier: Barrier | None = None,
     ):
@@ -104,12 +103,12 @@ class TaskQueue():
 
         Args:
             queue (Queue): An instance of a SyncManager queue
-            frame_handler (Callable): Callable to process the received
-                frame. Takes 1 parameter - an instance of _MessageFrame
             message_handler (Callable): Callable to process the received
-                message. The message handler should accept 2 parameters:
-                    The message
-                    Prpoerties (an instance of MessageFrameProperties)
+                message. The message handler should accept 1 parameter:
+                    frame - An instance of _MessageFrame
+                The message handler can return a response.  This will be
+                place on the queue specified as 'response_queue' in the frame
+                properties.
 
         Returns:
             None
@@ -126,11 +125,6 @@ class TaskQueue():
             )
 
         self.__queue: queue.Queue = queue
-
-        if callable(frame_handler):
-            self.__frame_handler: Callable | None = frame_handler
-        else:
-            self.__frame_handler: Callable | None = None
 
         if not stop_barrier:
             raise exception.MultiTaskingBarrierNotFoundError(
@@ -203,9 +197,9 @@ class TaskQueue():
         _frame = _MessageFrame(message_type=message_type, data=item)
 
         # Set Properties
-        _frame.properties.response_queue = response_queue
-        _frame.properties.message_id = message_id
-        _frame.properties.session_id = session_id
+        _frame.response_queue = response_queue
+        _frame.message_id = message_id
+        _frame.session_id = session_id
 
         # Put a message on the queue
         self.__queue.put(_frame, block=block, timeout=timeout)
@@ -216,14 +210,14 @@ class TaskQueue():
     #
     def put(
             self,
-            item,
+            item: Any = None,
             **kwargs
     ):
         '''
         Wrapper for _put_type specifying a type of 'DATA'
 
         Args:
-            item: Allow item to be spicified as a positional arg
+            item (Any): The data to be sent
             kwargs: Keyword arguments to be passed to _put_type
 
         Returns:
@@ -237,15 +231,58 @@ class TaskQueue():
 
 
     #
+    # query
+    #
+    def query(
+            self,
+            item: Any = None,
+            response_queue: TaskQueue | None = None,
+            **kwargs
+    ) -> str:
+        '''
+        Wrapper for _put_type handling the query message type
+
+        Args:
+            item (Any): The data to be sent
+            response_queue (Queue): The queue to send the response to
+            kwargs: Keyword arguments to be passed to _put_type
+
+        Returns:
+            str: The session ID - reponse will have the same ID
+
+        Raises:
+            None
+        '''
+        if not response_queue:
+            raise exception.MultiTaskingQueueNotFoundError(
+                "A response queue is required for a query"
+            )
+
+        # Set any properties specifically for the query
+        kwargs["session_id"] = str(uuid.uuid4())
+        kwargs["response_queue"] = response_queue
+
+        # Put a message on the queue with a type of 'query'
+        self._put_type(
+            item=item,
+            message_type=_MessageType.QUERY,
+            **kwargs
+        )
+
+        # Return the session ID
+        return kwargs["session_id"]
+
+
+    #
     # get
     #
     def get(
             self,
             block: bool = True,
             timeout: float | None = None
-    ) -> tuple[Any, MessageFrameProperties | None]:
+    ) -> _MessageFrame | None:
         '''
-        Get a message and properties from the queue
+        Get a message message frame from the queue
 
         Args:
             block (bool): If True block until message received. If false,
@@ -253,22 +290,22 @@ class TaskQueue():
             timeout: Time (in seconds) to wait before returning
         
         Returns:
-            Any: The data sent via the queue
+            _MessageFrame: The message frame sent via the queue
 
         Raises:
             MultiTaskingQueueInvalidFormatError:
                 When an incorrectly formatted message is received
             MultiTaskingQueueFrameExit:
                 When the queue recieves an exit message frame
-            MultiTaskingQueueFrameNotData:
-                When the queue receives a frame that is not data.  For example
-                the exit message.
+            MultiTaskingQueueSystemFrame:
+                When the queue receives a system frame.  For example the EXIT
+                message.
         '''
         # Get a message from the queue
         try:
             _frame = self.__queue.get(block=block, timeout=timeout)
         except queue.Empty:
-            return None, None
+            return None
 
         # Confirm the message is in the correct format
         if not isinstance(_frame, _MessageFrame):
@@ -279,16 +316,15 @@ class TaskQueue():
         if _frame.message_type == _MessageType.EXIT:
             raise exception.MultiTaskingQueueFrameExit
 
-        if callable(self.__frame_handler):
-            self.__frame_handler(_frame)
+        if _frame.message_type in (
+                _MessageType.DATA,
+                _MessageType.QUERY,
+                _MessageType.RESPONSE
+        ):
+            return _frame
 
-        if _frame.message_type == _MessageType.DATA:
-            return _frame.data, _frame.properties
-
-        # The frame type is not data, so no further processing should occur
-        # (and we should not have got to this point as it should have already
-        # been handled)
-        raise exception.MultiTaskingQueueFrameNotData
+        # The frame should have been processed somewhere above
+        raise exception.MultiTaskingQueueSystemFrame
 
 
     #
@@ -300,13 +336,13 @@ class TaskQueue():
             timeout: float | None = None
     ) -> Any:
         '''
-        Get a message from the queue (ignore the properties)
+        Get a message from the queue (stripping the frame)
 
         Args:
             block (bool): If True block until message received. If false,
                 check for message and return
             timeout: Time (in seconds) to wait before returning
-        
+
         Returns:
             Any: The data sent via the queue
 
@@ -314,8 +350,8 @@ class TaskQueue():
             None
         '''
         # Call 'get' - ignore properties
-        _data, _ = self.get(block=block, timeout=timeout)
-        return _data
+        _frame = self.get(block=block, timeout=timeout)
+        return _frame.data if _frame else None
 
 
     #
@@ -369,20 +405,29 @@ class TaskQueue():
         self.__listener_running = True
         while self.__listener_running:
             try:
-                _msg, _props = self.get()
+                _frame = self.get()
 
             except exception.MultiTaskingQueueFrameExit:
                 # The exit message frame was received
                 self.__listener_running = False
                 continue            
 
-            except exception.MultiTaskingQueueFrameNotData:
+            except exception.MultiTaskingQueueSystemFrame:
                 # The message was an internal message type (ignore it)
                 continue
 
+            if not _frame:
+                raise exception.MultiTaskingQueueInvalidFormatError(
+                    "Message did not contain a frame"
+                )
+
             # Process the data
             if callable(self._message_handler):
-                self._message_handler(_msg, _props)
+                _response = self._message_handler(_frame)
+
+                # Is a response required?
+                if _frame.message_type == _MessageType.QUERY:
+                    self.respond(response=_response, query_frame=_frame)
 
         # If the stop_barrier is set, notify it
         if self.__stop_barrier:
@@ -426,6 +471,46 @@ class TaskQueue():
                     # Ignore this - The other process/thread should be waiting
                     # (and this is to let the caller know we are done)
                     pass
+
+
+    #
+    # respond
+    #
+    def respond(
+            self,
+            response: Any = None,
+            query_frame: _MessageFrame | None = None,
+            **kwargs
+    ):
+        '''
+        Responsd to a query
+
+        Args:
+            response (Any): The response to be sent
+            query_frame (_MessageFrame): The message frame from the original query
+            response (Any): The queue to send the response to
+            kwargs: Keyword arguments to be passed to _put_type
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        assert query_frame, "A query frame is required to create a response"
+
+        if not isinstance(query_frame.response_queue, TaskQueue):
+            raise exception.MultiTaskingQueueNotFoundError(
+                "Cannot determine queue to use for response"
+            )
+
+        # Put the message on the response queue
+        query_frame.response_queue._put_type(
+            item=response,
+            message_type=_MessageType.RESPONSE,
+            session_id=query_frame.session_id,
+            **kwargs
+        )
 
 
 ###########################################################################

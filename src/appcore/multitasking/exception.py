@@ -93,8 +93,8 @@ class MultiTaskingQueueFrameExit(Exception):
     pass
 
 
-class MultiTaskingQueueFrameNotData(Exception):
-    ''' The queue frame is not a data frame (eg might be exit message) '''
+class MultiTaskingQueueSystemFrame(Exception):
+    ''' The queue frame is a system message frame (eg might be exit message) '''
     pass
 
 

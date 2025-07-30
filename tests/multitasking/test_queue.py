@@ -22,6 +22,7 @@ along with this program (See file: COPYING). If not, see
 # System Imports
 import pytest
 import time
+from datetime import datetime
 from appcore.multitasking._message_frame import _MessageType
 import appcore.multitasking.exception as exception
 from appcore.typing import TaskStatus
@@ -61,9 +62,16 @@ def stop_queue_listener(queue=None):
 #
 # Message handler that raises an exception if the message isn't correct
 #
-def message_handler(msg, props):
-    if msg != BASIC_TEXT:
+def message_handler(frame):
+    if frame.data != BASIC_TEXT:
         raise EXCEPTION(EXCEPTION_DESC)
+
+
+#
+# Message handler that returns the frame data string with "response:" prepended
+#
+def query_handler_string(frame):
+    return f"response:{str(frame.data)}"
 
 
 ###########################################################################
@@ -98,11 +106,59 @@ class Test_Basic_Queue():
 
 
 #
-# Queue
+# Queue Listener
 #
-class Test_Queue():
+class Test_Queue_Listener():
+    def test_listener_start_stop_thread(self, manager):
+        ''' Test sarting/stopping a listener running in a thread '''
+        q = manager.Queue(message_handler=message_handler)
+
+        # Create a thread for the listener
+        _kwargs = {
+            "queue": q
+        }
+
+        _task = manager.Thread(
+            name = f"Queue Listener - Start/Stop Thread",
+            target = start_queue_listener,
+            kwargs = _kwargs,
+            stop_function = stop_queue_listener,
+            stop_kwargs = _kwargs,
+        )
+
+        # Start the task
+        _task.start()
+
+        # Start the task
+        _task.stop()
+
+
+    def test_listener_start_stop_process(self, manager):
+        ''' Test sarting/stopping a listener running in a process '''
+        q = manager.Queue(message_handler=message_handler)
+
+        # Create a thread for the process
+        _kwargs = {
+            "queue": q
+        }
+
+        _task = manager.Process(
+            name = f"Queue Listener - Start/Stop Process",
+            target = start_queue_listener,
+            kwargs = _kwargs,
+            stop_function = stop_queue_listener,
+            stop_kwargs = _kwargs,
+        )
+
+        # Start the task
+        _task.start()
+
+        # Start the task
+        _task.stop()
+
+
     def test_listener_thread(self, manager):
-        ''' Test a listener runnong in a thread '''
+        ''' Test a listener running in a thread '''
         q = manager.Queue(message_handler=message_handler)
 
         # Create a thread for the listener
@@ -141,7 +197,7 @@ class Test_Queue():
 
 
     def test_listener_process(self, manager):
-        ''' Test a listener runnong in a process '''
+        ''' Test a listener running in a process '''
         q = manager.Queue(message_handler=message_handler)
 
         # Create a thread for the listener
@@ -177,6 +233,47 @@ class Test_Queue():
         assert _results.exception_desc == EXCEPTION_DESC
         assert str(_results.exception_stack).find(
                 f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
+
+
+#
+# Queue Query/Responsd
+#
+class Test_Queue_Query_Response():
+    def test_query_success(self, manager):
+        ''' Test a Query/Response - Success'''
+        _query_string = str(datetime.today())
+
+        query_q = manager.Queue(message_handler=query_handler_string)
+        response_q = manager.Queue()
+
+        # Create a thread for the listener
+        _kwargs = {
+            "queue": query_q
+        }
+
+        _task = manager.Thread(
+            name = f"Queue Listener - Query - Success",
+            target = start_queue_listener,
+            kwargs = _kwargs,
+            stop_function = stop_queue_listener,
+            stop_kwargs = _kwargs,
+        )
+
+        # Start the task
+        _task.start()
+
+        # Send the query
+        _session_id = query_q.query(_query_string, response_queue=response_q)
+
+        # Get the response
+        _resp_frame = response_q.get(timeout=5.0)
+        assert _resp_frame
+        assert _resp_frame.session_id == _session_id
+        assert _resp_frame.data == f"response:{_query_string}"
+
+        # Stop the task
+        _task.stop()
+
 
 
 ###########################################################################
