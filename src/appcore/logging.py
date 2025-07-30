@@ -92,8 +92,7 @@ def configure_logger(
 
     # Make sure the log level is valid
     _log_levels: list = list([_entry.value for _entry in LoggingLevel])
-    assert log_level in _log_levels, \
-        f"'{log_level}' is not in {_log_levels}"
+    assert log_level in _log_levels, f"'{log_level}' is not in {_log_levels}"
 
     # Set up the logger
     _logger = logging.getLogger(name)

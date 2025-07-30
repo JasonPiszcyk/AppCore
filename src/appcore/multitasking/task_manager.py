@@ -306,8 +306,9 @@ class TaskManager():
 
         Args:
             message_handler (Callable): Callable to process the received
-                message. Takes 1 parameter of type Any which is the data
-                contained in the frame.
+                message. The message handler should accept 2 parameters:
+                    The message
+                    A queue to respond to (if None then no response)
 
         Returns:
             None
