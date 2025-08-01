@@ -20,11 +20,11 @@ along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
 # What to import when 'import * from module'
-# __all__ = [ "TaskManager", ]
+# __all__ = [ "AppCoreManager", ]
 
 
 # What to import as part of the the module (import module)
-# from appcore.multitasking.task_manager import TaskManager
+# from appcore.multitasking.task_manager import AppCoreManager
 
 
 

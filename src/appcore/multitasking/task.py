@@ -25,14 +25,15 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
-from appcore.multitasking import LOG
 
 # System Modules
 import uuid
-from multiprocessing import get_context, get_start_method
+from multiprocessing import Process, get_context, get_start_method
+from multiprocessing import current_process
 from threading import Thread, BrokenBarrierError
 
 # Local app modules
+from appcore.appcore_base import AppCoreModuleBase
 from appcore.typing import TaskStatus
 from appcore.multitasking.task_results import TaskResults
 from appcore.multitasking.task_wrapper import task_wrapper
@@ -40,10 +41,10 @@ from appcore.multitasking import exception
 
 # Imports for python variable type hints
 from typing import Any, Callable, Literal, get_args
-from multiprocessing import Process
-from multiprocessing.context import SpawnContext, DefaultContext, SpawnProcess
-from multiprocessing.managers import SyncManager
-from threading import Barrier
+from multiprocessing.context import SpawnContext, DefaultContext
+from multiprocessing.context import SpawnProcess as SpawnProcessType
+from multiprocessing.managers import SyncManager as SyncManagerType
+from threading import Barrier as BarrierType
 from appcore.typing import KeywordDictType
 
 
@@ -76,7 +77,7 @@ TASK_JOIN_TIMEOUT: float = 1.0
 # Task Class Definition
 #
 ###########################################################################
-class Task():
+class Task(AppCoreModuleBase):
     '''
     Class to describe a task.
 
@@ -86,7 +87,7 @@ class Task():
     Attributes:
         name (str): An identifier for the task
         target (Callable): Function to run in the new thread/process
-        kwargs (dict): Arguments to pass to the target function
+        target_kwargs (dict): Arguments to pass to the target function
         stop_function (Callable): Function to run to stop the
             thread/process
         stop_kwargs (dict): Arguments to pass the stop function
@@ -98,29 +99,35 @@ class Task():
     #
     def __init__(
             self,
+            *args,
             context: ContextType | None = None, 
-            manager: SyncManager | None = None,
+            manager: SyncManagerType | None = None,
             name: str = "",
             target: Callable | None = None,
-            kwargs: KeywordDictType = {},
+            target_kwargs: KeywordDictType = {},
             stop_function: Callable | None = None,
             stop_kwargs: KeywordDictType = {},
-            task_type: TaskTypeType = "thread"
-    ):
+            task_type: TaskTypeType = "thread",
+            **kwargs
+     ):
         '''
         Initialises the instance.
 
         Args:
+            *args (Undef): Unnamed arguments to be passed to the constructor
+                of the inherited process
             name (str): An identifier for the task
             context (ContextType): The context to run multiprocessing in
             manager (SyncManager): An instance of the SyncManager class to
                 provision resources for synching tasks
             target (Callable): Function to run in the new thread/process
-            kwargs (dict): Arguments to pass to the target function
+            target_kwargs (dict): Arguments to pass to the target function
             stop_function (Callable): Function to run to stop the
                 thread/process
             stop_kwargs (dict): Arguments to pass the stop function
             task_type (TaskTypeType): The type of task to be executed
+            **kwargs (Undef): Keyword arguments to be passed to the constructor
+                of the inherited process
 
         Returns:
             None
@@ -128,6 +135,8 @@ class Task():
         Raises:
             None
         '''
+        super().__init__(*args, **kwargs)
+
         # If the context is not set, use the default
         task_type_options = get_args(TaskTypeType)
         assert task_type in task_type_options, \
@@ -136,17 +145,17 @@ class Task():
         # Private Attributes
         self.__context: ContextType = context if context else get_context()
         if manager:
-            self.__manager: SyncManager = manager
+            self.__manager: SyncManagerType = manager
         else:
-            self.__manager: SyncManager = self.__context.Manager()
+            self.__manager: SyncManagerType = self.__context.Manager()
 
         self.__task_type = task_type
         self.__thread: Thread | None = None
-        self.__process: Process | SpawnProcess | None = None
+        self.__process: Process | SpawnProcessType | None = None
 
         # Barriers to sync when the task is started/stopped
-        self.__start_barrier: Barrier | None = None
-        self.__stop_barrier: Barrier | None = None
+        self.__start_barrier: BarrierType | None = None
+        self.__stop_barrier: BarrierType | None = None
 
         # Create the shared information dictionary
         self.__info = self.__manager.dict()
@@ -160,7 +169,11 @@ class Task():
         # Attributes
         self.name: str = name if name else str(uuid.uuid4())
         self.target: Callable | None = target
-        self.kwargs: KeywordDictType = kwargs if kwargs else {}
+        if target_kwargs:
+            self.target_kwargs: KeywordDictType = target_kwargs
+        else:
+            self.target_kwargs: KeywordDictType = {}
+
         self.stop_function: Callable | None = stop_function
         self.stop_kwargs: KeywordDictType = stop_kwargs if stop_kwargs else {}
 
@@ -224,7 +237,9 @@ class Task():
             TaskIsNotRunningError:
                 When startup of the task does not complete successfully
         '''
-        LOG.debug(f"Multiprocessing Start Method: {str(get_start_method())}")
+        self.logger.debug(
+            f"Multiprocessing Start Method: {str(get_start_method())}"
+        )
 
         # Create a barrier to sync when the task is started
         if not self.__start_barrier:
@@ -241,15 +256,19 @@ class Task():
         if callable(self.target):
             self.__info["status"] = TaskStatus.RUNNING.value
 
-            LOG.debug(f"Start: Task Type = {self.__task_type}")
+            self.logger.debug(f"Start: Task Type = {self.__task_type}")
 
             # Wrap the target functions to gather information
             _kwargs: KeywordDictType = {
                 "target": self.target,
-                "kwargs": self.kwargs,
+                "kwargs": self.target_kwargs,
                 "info": self.__info,
+                "parent_pid": current_process().pid,
                 "start_barrier": self.__start_barrier,
-                "stop_barrier": self.__stop_barrier
+                "stop_barrier": self.__stop_barrier,
+                "log_level": self._log_level,
+                "log_file": self._log_file,
+                "log_to_console": self._log_to_console,
             }
 
             if self.__task_type == "thread":
@@ -318,7 +337,9 @@ class Task():
                     # When the process/thread is stopped, wait for the barrier
                     # (set in the task_wrapper)
                     try:
-                        LOG.debug(f"Stop: Waiting at Barrier for Thread")
+                        self.logger.debug(
+                            f"Stop: Waiting at Barrier for Thread"
+                        )
                         self.__stop_barrier.wait(timeout=TASK_STOP_TIMEOUT)
                     except BrokenBarrierError:
                         self.__stop_barrier = None
@@ -357,7 +378,9 @@ class Task():
                     # When the process/thread is stopped, wait for the barrier
                     # (set in the task_wrapper)
                     try:
-                        LOG.debug(f"Stop: Waiting at Barrier for Process")
+                        self.logger.debug(
+                            f"Stop: Waiting at Barrier for Process"
+                        )
                         self.__stop_barrier.wait(timeout=TASK_STOP_TIMEOUT)
                     except BrokenBarrierError:
                         self.__stop_barrier = None

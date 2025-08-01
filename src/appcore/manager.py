@@ -25,22 +25,25 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
-from appcore.multitasking import LOG
 
 # System Modules
 from multiprocessing import get_context
-from threading import Event
+import logging
 
 # Local app modules
+from appcore.appcore_base import AppCoreModuleBase
+from appcore.validation import is_valid_log_level_string
 from appcore.multitasking.task import Task, TaskType
 from appcore.multitasking.task_queue import TaskQueue
 
 # Imports for python variable type hints
 from typing import Callable
-from multiprocessing.context import SpawnContext
-from multiprocessing.managers import SyncManager
-from threading import Lock, Barrier
-from appcore.typing import KeywordDictType
+from multiprocessing.context import SpawnContext as SpawnContextType
+from multiprocessing.managers import SyncManager as SyncManagerType
+from threading import Lock as LockType
+from threading import Barrier as BarrierType
+from threading import Event as EventType
+from appcore.typing import KeywordDictType, LoggingLevel
 
 
 ###########################################################################
@@ -65,14 +68,14 @@ DEFAULT_BARRIER_TIMEOUT: float = 5.0
 
 ###########################################################################
 #
-# TaskManager Class Definition
+# AppCoreManager Class Definition
 #
 ###########################################################################
-class TaskManager():
+class AppCoreManager(AppCoreModuleBase):
     '''
-    Class to describe the TaskManager.
+    Class to describe the AppCore Manager.
 
-    The TaskManager is used to create any required multitasking resources
+    The AppCore Manager is used to create any required resources
 
     Attributes:
         None
@@ -83,12 +86,17 @@ class TaskManager():
     #
     def __init__(
             self,
+            *args,
+            **kwargs
     ):
         '''
         Initialises the instance.
 
         Args:
-            None
+            *args (Undef): Unnamed arguments to be passed to the constructor
+                of the inherited process
+            **kwargs (Undef): Keyword arguments to be passed to the constructor
+                of the inherited process
 
         Returns:
             None
@@ -96,12 +104,14 @@ class TaskManager():
         Raises:
             None
         '''
+        super().__init__(*args, **kwargs)
+
         # Private Attributes
-        self.__context: SpawnContext = get_context("spawn")
-        self.__manager: SyncManager = self.__context.Manager()
+        # Delay setting context/manager until they are used.
+        self.__context: SpawnContextType | None = None
+        self.__manager: SyncManagerType | None = None
 
         # Attributes
-
 
 
     ###########################################################################
@@ -113,7 +123,7 @@ class TaskManager():
     # context
     #
     @property
-    def context(self) -> SpawnContext:
+    def context(self) -> SpawnContextType | None:
         ''' The context used by the multiprocessing library '''
         return self.__context
 
@@ -122,7 +132,7 @@ class TaskManager():
     # manager
     #
     @property
-    def manager(self) -> SyncManager:
+    def manager(self) -> SyncManagerType | None:
         ''' The multiprocessing SyncManger instance to use '''
         return self.__manager
 
@@ -132,6 +142,33 @@ class TaskManager():
     # Resource Creation Methods
     #
     ###########################################################################
+    #
+    # _get_manager
+    #
+    def _get_manager(self) -> SyncManagerType:
+        '''
+        Get the Multiprocessing manager (or create it if not set)
+
+        Args:
+            None
+
+        Returns:
+            SyncManagerType
+
+        Raises:
+            None
+        '''
+        if not self.__context:
+            self.logger.debug(f"Context not set. Setting.")
+            self.__context: SpawnContextType | None = get_context("spawn")
+
+        if not self.__manager:
+            self.logger.debug(f"Manager not yet created. Creating.")
+            self.__manager: SyncManagerType | None = self.__context.Manager()
+
+        return self.__manager
+
+
     #
     # Thread
     #
@@ -160,16 +197,24 @@ class TaskManager():
         Raises:
             None
         '''
-        LOG.debug(f"Creating thread ({name})")
+        self.logger.debug(f"Creating thread ({name})")
+
+        # Ensure the multiprocessing manager has been created
+        # Also ensures the instance attributes __context and __manager are set
+        _ = self._get_manager()
+
         return Task(
             name=name,
             context=self.__context,
             manager=self.__manager,
             target=target,
-            kwargs=kwargs,
+            target_kwargs=kwargs,
             stop_function=stop_function,
             stop_kwargs=stop_kwargs,
-            task_type="thread"
+            task_type="thread",
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
         )
 
 
@@ -201,23 +246,31 @@ class TaskManager():
         Raises:
             None
         '''
-        LOG.debug(f"Creating process ({name})")
+        self.logger.debug(f"Creating process ({name})")
+
+        # Ensure the multiprocessing manager has been created
+        # Also ensures the instance attributes __context and __manager are set
+        _ = self._get_manager()
+
         return Task(
             name=name,
             context=self.__context,
             manager=self.__manager,
             target=target,
-            kwargs=kwargs,
+            target_kwargs=kwargs,
             stop_function=stop_function,
             stop_kwargs=stop_kwargs,
-            task_type="process"
+            task_type="process",
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
         )
 
 
     #
     # Event
     #
-    def Event(self) -> Event:
+    def Event(self) -> EventType:
         '''
         Create an event (using the multiprocessing manager)
 
@@ -225,19 +278,23 @@ class TaskManager():
             None
 
         Returns:
-            None
+            Event: An event
 
         Raises:
-            Event
+            None
         '''
-        LOG.debug(f"Creating event")
-        return self.__manager.Event()
+        self.logger.debug(f"Creating event")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return _manager.Event()
 
 
     #
     # Lock
     #
-    def Lock(self) -> Lock:
+    def Lock(self) -> LockType:
         '''
         Create a Lock (using the multiprocessing manager)
 
@@ -245,13 +302,17 @@ class TaskManager():
             None
 
         Returns:
-            None
+            Lock: A lock
 
         Raises:
-            Lock
+            None
         '''
-        LOG.debug(f"Creating lock")
-        return self.__manager.Lock()
+        self.logger.debug(f"Creating lock")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return _manager.Lock()
 
 
     #
@@ -262,7 +323,7 @@ class TaskManager():
             parties: int = 2,
             action: Callable | None = None,
             timeout: float = 5.0
-    ) -> Barrier:
+    ) -> BarrierType:
         '''
         Create a Barrier (using the multiprocessing manager)
 
@@ -274,13 +335,17 @@ class TaskManager():
             timeout (float): Time to wait for the barrier to be lifted
 
         Returns:
-            Barrier
+            Barrier: A Barrier
 
         Raises:
             None
         '''
-        LOG.debug(f"Creating barrier")
-        return self.__manager.Barrier(
+        self.logger.debug(f"Creating barrier")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return _manager.Barrier(
             parties=parties,
             action=action,
             timeout=timeout
@@ -300,25 +365,79 @@ class TaskManager():
         Args:
             message_handler (Callable): Callable to process the received
                 message. The message handler should accept 1 parameter:
-                    frame - An instance of _MessageFrame
+                    frame - An instance of MessageFrame
                 The message handler can return a response.  This will be
                 place on the queue specified as 'response_queue' in the frame
                 properties.
 
         Returns:
-            None
+            TaskQueue: An instance of a Taskqueue
 
         Raises:
-            Lock
+            None
         '''
-        LOG.debug(f"Creating queue")
+        self.logger.debug(f"Creating queue")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
         return TaskQueue(
-            queue=self.__manager.Queue(),
-            stop_barrier=self.__manager.Barrier(
+            queue=_manager.Queue(),
+            stop_barrier=_manager.Barrier(
                 parties=2, action=None, timeout=DEFAULT_BARRIER_TIMEOUT
             ),
             message_handler=message_handler
         )
+
+
+    # 
+    # Logger
+    #
+    def Logger(
+            self,
+            name: str = "",
+            level: str = LoggingLevel.INFO.value,
+            filename: str = "",
+            to_console: bool = False,
+    ) -> logging.Logger:
+        '''
+        Create a Queue (using the multiprocessing manager)
+
+        Args:
+            name: Name to use for the logger
+            level (str): The log level to use when configuring logging
+            filename (str): Path of file to log to.  If not set, will not log
+                to file
+            to_console (bool): Write the logging out to the standard output 
+                device (usually stdout)
+
+        Returns:
+            Logger - An instance to use for logging
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating logger")
+
+        _logger: logging.Logger = logging.getLogger(name)
+        self.logging_set_level(logger=_logger, log_level=level)
+
+        # Remove existing handlers (eg stderr)
+        for _handler in _logger.handlers.copy():
+            _logger.removeHandler(_handler)
+
+        # Log to a file if required
+        if filename:
+            _ = self.logging_set_file(
+                logger=_logger,
+                filename=filename
+            )
+
+        if to_console:
+            _ = self.logging_to_console(logger=_logger)
+
+        # Return the logger
+        return _logger
 
 
 ###########################################################################

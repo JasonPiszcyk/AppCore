@@ -25,14 +25,14 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
-from appcore.multitasking import LOG
 
 # System Modules
 import queue
 import uuid
 
 # Local app modules
-from appcore.multitasking._message_frame import _MessageFrame, _MessageType
+from appcore.appcore_base import AppCoreModuleBase
+from appcore.multitasking.message_frame import MessageFrame, MessageType
 
 import appcore.multitasking.exception as exception
 from threading import Barrier, BrokenBarrierError
@@ -68,7 +68,7 @@ LISTENER_SHUTDOWN_TIMEOUT: float = 5.0
 # TaskQueue Class Definition
 #
 ###########################################################################
-class TaskQueue():
+class TaskQueue(AppCoreModuleBase):
     '''
     Class to describe a TaskQueue.  Extension to a basic queue to include
     message framing, a listener function to listen for and process messages,
@@ -84,21 +84,27 @@ class TaskQueue():
     #
     def __init__(
             self,
+            *args,
             queue: queue.Queue | None = None,
             message_handler: Callable | None = None,
             stop_barrier: Barrier | None = None,
+            **kwargs
     ):
         '''
         Initialises the instance.
 
         Args:
+            *args (Undef): Unnamed arguments to be passed to the constructor
+                of the inherited process
             queue (Queue): An instance of a SyncManager queue
             message_handler (Callable): Callable to process the received
                 message. The message handler should accept 1 parameter:
-                    frame - An instance of _MessageFrame
+                    frame - An instance of MessageFrame
                 The message handler can return a response.  This will be
                 place on the queue specified as 'response_queue' in the frame
                 properties.
+            **kwargs (Undef): Keyword arguments to be passed to the constructor
+                of the inherited process
 
         Returns:
             None
@@ -106,6 +112,8 @@ class TaskQueue():
         Raises:
             None
         '''
+        super().__init__(*args, **kwargs)
+
         # Private Attributes
         self.__listener_running: bool = False
 
@@ -155,7 +163,7 @@ class TaskQueue():
     #
     def _put_type(
             self,
-            message_type: _MessageType = _MessageType.EMPTY,
+            message_type: MessageType = MessageType.EMPTY,
             item: Any = None,
             block: bool = True,
             timeout: float | None = None,
@@ -167,7 +175,7 @@ class TaskQueue():
         Put a message on the queue with the specified type
 
         Args:
-            message_type (_MessageType): The type of message being sent
+            message_type (MessageType): The type of message being sent
             item (Any): The data to be sent
             block (bool): If True block until message is placed on queue. If 
                 false, return immediately
@@ -184,7 +192,9 @@ class TaskQueue():
         Raises:
             None
         '''
-        _frame = _MessageFrame(message_type=message_type, data=item)
+        self.logger.debug(f"Putting Message")
+
+        _frame = MessageFrame(message_type=message_type, data=item)
 
         # Set Properties
         _frame.response_queue = response_queue
@@ -216,8 +226,10 @@ class TaskQueue():
         Raises:
             None
         '''
+        self.logger.debug(f"Putting DATA Message")
+
         # Put a message on the queue with a type of 'DATA'
-        self._put_type(item=item, message_type=_MessageType.DATA, **kwargs)
+        self._put_type(item=item, message_type=MessageType.DATA, **kwargs)
 
 
     #
@@ -243,6 +255,7 @@ class TaskQueue():
         Raises:
             None
         '''
+        self.logger.debug(f"Putting Query")
         if not response_queue:
             raise exception.MultiTaskingQueueNotFoundError(
                 "A response queue is required for a query"
@@ -255,7 +268,7 @@ class TaskQueue():
         # Put a message on the queue with a type of 'query'
         self._put_type(
             item=item,
-            message_type=_MessageType.QUERY,
+            message_type=MessageType.QUERY,
             **kwargs
         )
 
@@ -270,7 +283,7 @@ class TaskQueue():
             self,
             block: bool = True,
             timeout: float | None = None
-    ) -> _MessageFrame | None:
+    ) -> MessageFrame | None:
         '''
         Get a message message frame from the queue
 
@@ -280,7 +293,7 @@ class TaskQueue():
             timeout: Time (in seconds) to wait before returning
         
         Returns:
-            _MessageFrame: The message frame sent via the queue
+            MessageFrame: The message frame sent via the queue
 
         Raises:
             MultiTaskingQueueInvalidFormatError:
@@ -291,6 +304,8 @@ class TaskQueue():
                 When the queue receives a system frame.  For example the EXIT
                 message.
         '''
+        self.logger.debug(f"Getting Message")
+
         # Get a message from the queue
         try:
             _frame = self.__queue.get(block=block, timeout=timeout)
@@ -298,18 +313,18 @@ class TaskQueue():
             return None
 
         # Confirm the message is in the correct format
-        if not isinstance(_frame, _MessageFrame):
+        if not isinstance(_frame, MessageFrame):
             raise exception.MultiTaskingQueueInvalidFormatError(
                 "Get - Message format is incorrect"
             )
 
-        if _frame.message_type == _MessageType.EXIT:
+        if _frame.message_type == MessageType.EXIT:
             raise exception.MultiTaskingQueueFrameExit
 
         if _frame.message_type in (
-                _MessageType.DATA,
-                _MessageType.QUERY,
-                _MessageType.RESPONSE
+                MessageType.DATA,
+                MessageType.QUERY,
+                MessageType.RESPONSE
         ):
             return _frame
 
@@ -339,6 +354,8 @@ class TaskQueue():
         Raises:
             None
         '''
+        self.logger.debug(f"Getting Message (no frame)")
+
         # Call 'get' - ignore properties
         _frame = self.get(block=block, timeout=timeout)
         return _frame.data if _frame else None
@@ -360,6 +377,8 @@ class TaskQueue():
         Raises:
             None
         '''
+        self.logger.debug(f"Cleanup Queue")
+
         _queue_not_empty = True
         while _queue_not_empty:
             try:
@@ -389,6 +408,8 @@ class TaskQueue():
         Raises:
             None
         '''
+        self.logger.debug(f"Starting Listener")
+
         # If the listener is already running, just return
         if self.__listener_running: return
 
@@ -416,7 +437,7 @@ class TaskQueue():
                 _response = self._message_handler(_frame)
 
                 # Is a response required?
-                if _frame.message_type == _MessageType.QUERY:
+                if _frame.message_type == MessageType.QUERY:
                     self.respond(response=_response, query_frame=_frame)
 
         # If the stop_barrier is set, notify it
@@ -449,9 +470,10 @@ class TaskQueue():
             MultiTaskingQueueListenerShutdownError:
                 When the Listener does not acknowledge the exit message
         '''
+        self.logger.debug(f"Stopping Listener")
         if remote or self.__listener_running:
             # Put an EXIT message on the queue
-            self._put_type(message_type=_MessageType.EXIT)
+            self._put_type(message_type=MessageType.EXIT)
 
             # If the stop_barrier is set, notify it
             if self.__stop_barrier:
@@ -469,15 +491,15 @@ class TaskQueue():
     def respond(
             self,
             response: Any = None,
-            query_frame: _MessageFrame | None = None,
+            query_frame: MessageFrame | None = None,
             **kwargs
     ):
         '''
-        Responsd to a query
+        Respond to a query
 
         Args:
             response (Any): The response to be sent
-            query_frame (_MessageFrame): The message frame from the original query
+            query_frame (MessageFrame): The message frame from the original query
             response (Any): The queue to send the response to
             kwargs: Keyword arguments to be passed to _put_type
 
@@ -487,6 +509,7 @@ class TaskQueue():
         Raises:
             None
         '''
+        self.logger.debug(f"Respoding to Query")
         assert query_frame, "A query frame is required to create a response"
 
         if not isinstance(query_frame.response_queue, TaskQueue):
@@ -497,7 +520,7 @@ class TaskQueue():
         # Put the message on the response queue
         query_frame.response_queue._put_type(
             item=response,
-            message_type=_MessageType.RESPONSE,
+            message_type=MessageType.RESPONSE,
             session_id=query_frame.session_id,
             **kwargs
         )

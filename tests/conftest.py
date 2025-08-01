@@ -21,7 +21,7 @@ along with this program (See file: COPYING). If not, see
 '''
 
 import pytest
-from appcore.multitasking.task_manager import TaskManager
+from appcore.manager import AppCoreManager
 
 
 ###########################################################################
@@ -38,8 +38,8 @@ def pytest_configure(config):
 #
 ###########################################################################
 #
-# manager (multitasking manager)
+# manager (AppCore manager)
 #
 @pytest.fixture(scope="session")
 def manager():
-    return TaskManager()
+    return AppCoreManager(log_file="/tmp/appcore.log", log_level="debug")

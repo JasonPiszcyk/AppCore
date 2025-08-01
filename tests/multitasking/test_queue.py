@@ -23,7 +23,7 @@ along with this program (See file: COPYING). If not, see
 import pytest
 import time
 from datetime import datetime
-from appcore.multitasking._message_frame import _MessageType
+from appcore.multitasking.message_frame import MessageType
 import appcore.multitasking.exception as exception
 from appcore.typing import TaskStatus
 
@@ -100,7 +100,7 @@ class Test_Basic_Queue():
         ''' Test put_type with type of 'EXIT' '''
         q = manager.Queue()
 
-        q._put_type(message_type=_MessageType.EXIT)
+        q._put_type(message_type=MessageType.EXIT)
         with pytest.raises(exception.MultiTaskingQueueFrameExit):
             _ = q.get()
 

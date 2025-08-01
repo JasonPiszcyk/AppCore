@@ -26,19 +26,24 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
-from appcore.multitasking import LOG
+import logging
 
 # System Modules
 import sys
 import traceback
-from threading import BrokenBarrierError
+from threading import get_native_id, BrokenBarrierError
+from multiprocessing import current_process
+
 
 # Local app modules
 from appcore.typing import TaskStatus
+from appcore.appcore_base import AppCoreModuleBase
 
 # Imports for python variable type hints
 from typing import Any, Callable
 from threading import Barrier
+from logging import Handler as HandlerType
+from appcore.typing import LoggingLevel
 from appcore.typing import KeywordDictType
 
 
@@ -76,8 +81,12 @@ def task_wrapper(
         target: Callable | None = None,
         kwargs: KeywordDictType = {},
         info: dict = {},
+        parent_pid: int = 0,
         start_barrier: Barrier | None = None,
-        stop_barrier: Barrier | None = None
+        stop_barrier: Barrier | None = None,
+        log_level: str = LoggingLevel.INFO.value,
+        log_file: str = "",
+        log_to_console: bool = False,
 ) -> None:
     '''
     Wrapper to run a task, and store result information
@@ -86,10 +95,15 @@ def task_wrapper(
         target (Callable): Function to run in the new thread/process
         kwargs (dict): Arguments to pass the target function
         info (dict): The SyncManager dict object to stored results and status
+        parent_pid (int): The ID of the process that started this task
         start_barrier (Barrier): Barrier to wait on to allow sync with caller
             during task startup
         stop_barrier (Barrier): Barrier to wait on to allow sync with caller
             during task startup
+        log_level (str): The log level to use when configuring logging
+        log_file (str): Path of file to log to.  If not set, will not log
+            to file
+        log_to_console (bool): Write the logging out to the standard output 
 
     Returns:
         None
@@ -97,7 +111,51 @@ def task_wrapper(
     Raises:
         None
     '''
-    LOG.debug(f"Running Task: {str(target)}")
+    # Figure out if this is a new process or thread
+    _task_type = "process"
+    _task_id = current_process().pid
+
+    if current_process().pid == parent_pid:
+        # Running in a thread
+        _task_type = "thread"
+        _task_id = get_native_id()
+
+    # Shouldn't write to the same file from multiple processes so add a 
+    # suffix to the file name if this is a new process
+    _log_file_name = ""
+    if log_file:
+        if _task_type == "thread":
+            # Running as a thread
+            _log_file_name = f"{log_file}"
+        elif _task_type == "process":
+            # Running as a process
+            _name, _, _ext = log_file.rpartition(".")
+            if not _name:
+                _log_file_name = f"{_ext}-{current_process().pid}"
+            else:
+                _log_file_name = f"{_name}-{current_process().pid}.{_ext}"
+
+    # Create a log handler
+    _logger: logging.Logger = logging.getLogger("TaskWrapper")
+    AppCoreModuleBase.logging_set_level(logger=_logger, log_level=log_level)
+
+    # Remove existing handlers (eg stderr)
+    for _handler in _logger.handlers.copy():
+        _logger.removeHandler(_handler)
+
+    # Log to a file if required
+    if _log_file_name:
+        _ = AppCoreModuleBase.logging_set_file(
+            logger=_logger,
+            filename=_log_file_name
+        )
+
+    if log_to_console:
+        _ = AppCoreModuleBase.logging_to_console(logger=_logger)
+
+    _logger.debug(
+        f"Running Task as {_task_type}(id={_task_id}): {str(target)}"
+    )
 
     # Got here - so let the caller know the task has started
     if start_barrier:
@@ -120,13 +178,13 @@ def task_wrapper(
         try:
             _return_value = target(**kwargs)
             info["status"]= TaskStatus.COMPLETED.value
-            LOG.debug(f"Task finished OK: {str(target)}")
+            _logger.debug(f"Task finished OK: {str(target)}")
 
         except Exception:
             info["status"]= TaskStatus.ERROR.value
             _exception_stack = traceback.format_exc()
-            LOG.debug(f"Task FAILED: {str(target)}")
-            LOG.debug(_exception_stack)
+            _logger.debug(f"Task FAILED: {str(target)}")
+            _logger.debug(_exception_stack)
 
             _exc_info = sys.exc_info()
             if _exc_info:

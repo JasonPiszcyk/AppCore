@@ -25,7 +25,6 @@ along with this program (See file: COPYING). If not, see
 #
 ###########################################################################
 # Shared variables, constants, etc
-from appcore.multitasking import LOG
 
 # System Modules
 import enum
@@ -44,7 +43,7 @@ from typing import Any
 #
 ###########################################################################
 # The message types
-class _MessageType(enum.Enum):
+class MessageType(enum.Enum):
     EMPTY           = "__message_type_empty__"
     EXIT            = "__message_type_exit__"
     DATA            = "__message_type_data__"
@@ -57,7 +56,7 @@ class _MessageType(enum.Enum):
 # MessageFrame Class
 #
 ###########################################################################
-class _MessageFrame():
+class MessageFrame():
     '''
     Class to describe a queue message frame
 
@@ -65,7 +64,7 @@ class _MessageFrame():
     in the message.
 
     Attributes:
-        message_type (_MessageType): The type of message being sent
+        message_type (MessageType): The type of message being sent
         data (Any): The data sent via the queue
         response_queue (TaskQueue): The queue to send the response to
         message_id (str): An ID for the message (UUID will be generated if
@@ -79,7 +78,7 @@ class _MessageFrame():
     #
     def __init__(
             self,
-            message_type: _MessageType = _MessageType.EMPTY,
+            message_type: MessageType = MessageType.EMPTY,
             data: Any = None,
             response_queue: Any = None,
             message_id: str = "",
@@ -89,7 +88,7 @@ class _MessageFrame():
         Initializes the instance.
 
         Args:
-            message_type (_MessageType): The type of message being sent
+            message_type (MessageType): The type of message being sent
             data: The data sent via the queue
             response_queue (TaskQueue): The queue to send the response to
             message_id (str): An ID for the message (UUID will be generated if
@@ -109,10 +108,10 @@ class _MessageFrame():
         self.__session_id: str = ""
 
         # Attributes
-        if message_type in _MessageType:
-            self.message_type: _MessageType = message_type
+        if message_type in MessageType:
+            self.message_type: MessageType = message_type
         else:
-            self.message_type: _MessageType = _MessageType.EMPTY
+            self.message_type: MessageType = MessageType.EMPTY
 
         # The data
         self.data = data

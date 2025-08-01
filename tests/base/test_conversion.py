@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-PyTest - Test of helper functions
+PyTest - Test of conversion functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -21,7 +21,7 @@ along with this program (See file: COPYING). If not, see
 '''
 # System Imports
 import pytest
-from appcore.base import set_value
+from appcore.conversion import set_value
 from appcore.typing import DataType
 
 
