@@ -28,6 +28,7 @@ along with this program (See file: COPYING). If not, see
 
 # System Modules
 import uuid
+import json
 
 # Local app modules
 from appcore.typing import DataType
@@ -45,7 +46,7 @@ from typing import Any
 
 ###########################################################################
 #
-# Convenience/Helper Functions
+# Conversion Functions
 #
 ###########################################################################
 #
@@ -74,7 +75,7 @@ def set_value(
     '''
     assert type in DataType, "Type must be an entry of 'DataType'"
 
-    _val:Any = None
+    _val: Any = None
 
     try:
         if type == DataType.INT or type == DataType.INTEGER:
@@ -98,6 +99,67 @@ def set_value(
         _val = default
 
     return _val
+
+
+#
+# to_json
+#
+def to_json(
+    data: Any = None
+) -> str:
+    '''
+    Convert data to JSON.
+
+    Args:
+        data (Any): The data to be converted
+    
+    Returns:
+        str: The data as a JSON string
+
+    Raises:
+        None
+    '''
+    if not data: return ""
+
+    # Is the data already a string?
+    if isinstance(data, str): return data
+
+    # If the data can't be converted, return an empty string
+    try:
+        return json.dumps(data)
+    except:
+        return ""
+
+
+#
+# from_json
+#
+def from_json(
+        data: str = ""
+) -> Any:
+    '''
+    Convert a JSON string to python data
+
+    Args:
+        data (str): The json data
+    
+    Returns:
+        Any: The data converted from the JSON string
+
+    Raises:
+        None
+    '''
+    if not data: return None
+
+    # This will fail if the data isn't in JSON format
+    try:
+        return json.loads(data)
+    except:
+        # Error converting - If data is a string just return it
+        if isinstance(data, str):
+            return data
+        else:
+            return None
 
 
 ###########################################################################
