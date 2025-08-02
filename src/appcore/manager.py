@@ -59,7 +59,6 @@ from appcore.typing import KeywordDictType, LoggingLevel
 #
 # Constants
 #
-DEFAULT_BARRIER_TIMEOUT: float = 5.0
 
 #
 # Global Variables
@@ -383,9 +382,7 @@ class AppCoreManager(AppCoreModuleBase):
 
         return TaskQueue(
             queue=_manager.Queue(),
-            stop_barrier=_manager.Barrier(
-                parties=2, action=None, timeout=DEFAULT_BARRIER_TIMEOUT
-            ),
+            stop_event=_manager.Event(),
             message_handler=message_handler
         )
 

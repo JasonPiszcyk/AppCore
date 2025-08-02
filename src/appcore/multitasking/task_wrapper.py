@@ -31,7 +31,7 @@ import logging
 # System Modules
 import sys
 import traceback
-from threading import get_native_id, BrokenBarrierError
+from threading import get_native_id
 from multiprocessing import current_process
 
 
@@ -41,7 +41,7 @@ from appcore.appcore_base import AppCoreModuleBase
 
 # Imports for python variable type hints
 from typing import Any, Callable
-from threading import Barrier
+from threading import Event as EventType
 from logging import Handler as HandlerType
 from appcore.typing import LoggingLevel
 from appcore.typing import KeywordDictType
@@ -60,8 +60,6 @@ from appcore.typing import KeywordDictType
 #
 # Constants
 #
-# Don't wait too long on start - Don't want to block for no reason
-BARRIER_WAIT_TIMEOUT: float = 0.5
 
 
 #
@@ -82,8 +80,8 @@ def task_wrapper(
         kwargs: KeywordDictType = {},
         info: dict = {},
         parent_pid: int = 0,
-        start_barrier: Barrier | None = None,
-        stop_barrier: Barrier | None = None,
+        start_event: EventType | None = None,
+        stop_event: EventType | None = None,
         log_level: str = LoggingLevel.INFO.value,
         log_file: str = "",
         log_to_console: bool = False,
@@ -96,9 +94,9 @@ def task_wrapper(
         kwargs (dict): Arguments to pass the target function
         info (dict): The SyncManager dict object to stored results and status
         parent_pid (int): The ID of the process that started this task
-        start_barrier (Barrier): Barrier to wait on to allow sync with caller
+        start_event (Event): Event to wait on to allow sync with caller
             during task startup
-        stop_barrier (Barrier): Barrier to wait on to allow sync with caller
+        stop_event (Event): Event to wait on to allow sync with caller
             during task startup
         log_level (str): The log level to use when configuring logging
         log_file (str): Path of file to log to.  If not set, will not log
@@ -158,14 +156,7 @@ def task_wrapper(
     )
 
     # Got here - so let the caller know the task has started
-    if start_barrier:
-        try:
-            start_barrier.wait(timeout=BARRIER_WAIT_TIMEOUT)
-        except BrokenBarrierError:
-            # Ignore this - The other process/thread should be waiting
-            # (and this is to let the caller know we are done)
-            pass
-
+    if start_event: start_event.set()
 
     _return_value: Any = None
     _exception_name: str | None = None
@@ -200,13 +191,8 @@ def task_wrapper(
         info["results"]["exception_desc"] = _exception_desc
         info["results"]["exception_stack"] = _exception_stack
 
-    if stop_barrier:
-        try:
-            stop_barrier.wait(timeout=BARRIER_WAIT_TIMEOUT)
-        except BrokenBarrierError, EOFError:
-            # Ignore this - The other process/thread should be waiting
-            # (and this is to let the caller know we are done)
-            pass
+    # Set the vent to free other threads/processes
+    if stop_event: stop_event.set()
 
 
 ###########################################################################

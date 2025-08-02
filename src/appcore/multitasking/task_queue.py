@@ -35,10 +35,10 @@ from appcore.appcore_base import AppCoreModuleBase
 from appcore.multitasking.message_frame import MessageFrame, MessageType
 
 import appcore.multitasking.exception as exception
-from threading import Barrier, BrokenBarrierError
 
 # Imports for python variable type hints
 from typing import Any, Callable
+from threading import Event as EventType
 
 
 ###########################################################################
@@ -54,8 +54,7 @@ from typing import Any, Callable
 #
 # Constants
 #
-BARRIER_WAIT_TIMEOUT: float = 0.5
-LISTENER_SHUTDOWN_TIMEOUT: float = 5.0
+STOP_WAIT_TIMEOUT: float = 5.0
 
 
 #
@@ -87,7 +86,7 @@ class TaskQueue(AppCoreModuleBase):
             *args,
             queue: queue.Queue | None = None,
             message_handler: Callable | None = None,
-            stop_barrier: Barrier | None = None,
+            stop_event: EventType | None = None,
             **kwargs
     ):
         '''
@@ -124,12 +123,12 @@ class TaskQueue(AppCoreModuleBase):
 
         self.__queue: queue.Queue = queue
 
-        if not stop_barrier:
-            raise exception.MultiTaskingBarrierNotFoundError(
-                "Stop barrier missing from Queue instatiation"
+        if not stop_event:
+            raise exception.MultiTaskingEventNotFoundError(
+                "Stop event missing from Queue instantiation"
             )
 
-        self.__stop_barrier: Barrier = stop_barrier
+        self.__stop_event: EventType = stop_event
 
         if callable(message_handler):
             self._message_handler: Callable | None = message_handler
@@ -440,14 +439,8 @@ class TaskQueue(AppCoreModuleBase):
                 if _frame.message_type == MessageType.QUERY:
                     self.respond(response=_response, query_frame=_frame)
 
-        # If the stop_barrier is set, notify it
-        if self.__stop_barrier:
-            try:
-                self.__stop_barrier.wait(timeout=BARRIER_WAIT_TIMEOUT)
-            except BrokenBarrierError:
-                # Ignore this - The other process/thread should be waiting
-                # (and this is to let the caller know we are done)
-                pass
+        # Set the stop event
+        if self.__stop_event: self.__stop_event.set()
 
 
     #
@@ -475,14 +468,10 @@ class TaskQueue(AppCoreModuleBase):
             # Put an EXIT message on the queue
             self._put_type(message_type=MessageType.EXIT)
 
-            # If the stop_barrier is set, notify it
-            if self.__stop_barrier:
-                try:
-                    self.__stop_barrier.wait(timeout=BARRIER_WAIT_TIMEOUT)
-                except BrokenBarrierError:
-                    # Ignore this - The other process/thread should be waiting
-                    # (and this is to let the caller know we are done)
-                    pass
+            # If the stop_event exists, wait for it
+            if self.__stop_event: self.__stop_event.set()
+            if self.__stop_event:
+                self.__stop_event.wait(timeout=STOP_WAIT_TIMEOUT)
 
 
     #

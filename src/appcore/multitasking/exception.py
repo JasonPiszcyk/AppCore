@@ -68,6 +68,11 @@ class MultiTaskingQueueNotFoundError(Exception):
     pass
 
 
+class MultiTaskingEventNotFoundError(Exception):
+    ''' An event instance canot be found '''
+    pass
+
+
 class MultiTaskingBarrierNotFoundError(Exception):
     ''' A barrier instance canot be found '''
     pass

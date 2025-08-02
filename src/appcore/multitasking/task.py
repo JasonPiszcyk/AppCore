@@ -30,7 +30,7 @@ along with this program (See file: COPYING). If not, see
 import uuid
 from multiprocessing import Process, get_context, get_start_method
 from multiprocessing import current_process
-from threading import Thread, BrokenBarrierError
+from threading import Thread
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
@@ -44,7 +44,7 @@ from typing import Any, Callable, Literal, get_args
 from multiprocessing.context import SpawnContext, DefaultContext
 from multiprocessing.context import SpawnProcess as SpawnProcessType
 from multiprocessing.managers import SyncManager as SyncManagerType
-from threading import Barrier as BarrierType
+from threading import Event as EventType
 from appcore.typing import KeywordDictType
 
 
@@ -153,9 +153,9 @@ class Task(AppCoreModuleBase):
         self.__thread: Thread | None = None
         self.__process: Process | SpawnProcessType | None = None
 
-        # Barriers to sync when the task is started/stopped
-        self.__start_barrier: BarrierType | None = None
-        self.__stop_barrier: BarrierType | None = None
+        # Events to sync when the task is started/stopped
+        self.__start_event: EventType | None = None
+        self.__stop_event: EventType | None = None
 
         # Create the shared information dictionary
         self.__info = self.__manager.dict()
@@ -241,17 +241,13 @@ class Task(AppCoreModuleBase):
             f"Multiprocessing Start Method: {str(get_start_method())}"
         )
 
-        # Create a barrier to sync when the task is started
-        if not self.__start_barrier:
-            self.__start_barrier = self.__manager.Barrier(
-                    parties=2, action=None, timeout=TASK_START_TIMEOUT
-                )
+        # Create an event to sync when the task is started
+        if not self.__start_event:
+            self.__start_event = self.__manager.Event()
 
-        # Create a barrier to sync when the task is stopped
-        if not self.__stop_barrier:
-            self.__stop_barrier = self.__manager.Barrier(
-                    parties=2, action=None, timeout=TASK_STOP_TIMEOUT
-                )
+        # Create an event to sync when the task is stopped
+        if not self.__stop_event:
+            self.__stop_event = self.__manager.Event()
 
         if callable(self.target):
             self.__info["status"] = TaskStatus.RUNNING.value
@@ -264,8 +260,8 @@ class Task(AppCoreModuleBase):
                 "kwargs": self.target_kwargs,
                 "info": self.__info,
                 "parent_pid": current_process().pid,
-                "start_barrier": self.__start_barrier,
-                "stop_barrier": self.__stop_barrier,
+                "start_event": self.__start_event,
+                "stop_event": self.__stop_event,
                 "log_level": self._log_level,
                 "log_file": self._log_file,
                 "log_to_console": self._log_to_console,
@@ -289,14 +285,8 @@ class Task(AppCoreModuleBase):
                 self.__process.start()
 
 
-            # When the process/thread is started, wait for the barrier
-            try:
-                self.__start_barrier.wait(timeout=TASK_START_TIMEOUT)
-            except BrokenBarrierError:
-                self.__start_barrier = None
-                raise exception.TaskIsNotRunningError(
-                    f"Timeout waiting for task to start (Name: {self.name})"
-                )
+            # When the process/thread is started, wait for the event
+            self.__start_event.wait(timeout=TASK_START_TIMEOUT)
 
 
     #
@@ -333,20 +323,13 @@ class Task(AppCoreModuleBase):
             if callable(self.stop_function):
                 self.stop_function(**self.stop_kwargs)
 
-                if self.__stop_barrier:
-                    # When the process/thread is stopped, wait for the barrier
+                if self.__stop_event:
+                    # When the process/thread is stopped, wait for the event
                     # (set in the task_wrapper)
-                    try:
-                        self.logger.debug(
-                            f"Stop: Waiting at Barrier for Thread"
-                        )
-                        self.__stop_barrier.wait(timeout=TASK_STOP_TIMEOUT)
-                    except BrokenBarrierError:
-                        self.__stop_barrier = None
-                        raise exception.TaskIsNotRunningError(
-                            "Timeout waiting for task to stop " +
-                                f"(Name: {self.name})"
-                        )
+                    self.logger.debug(
+                        f"Stop: Waiting at event for Thread"
+                    )
+                    self.__stop_event.wait(timeout=TASK_STOP_TIMEOUT)
 
 
             # Wait for the thread to finish
@@ -374,19 +357,13 @@ class Task(AppCoreModuleBase):
             if callable(self.stop_function):
                 self.stop_function(**self.stop_kwargs)
 
-                if self.__stop_barrier:
-                    # When the process/thread is stopped, wait for the barrier
+                if self.__stop_event:
+                    # When the process/thread is stopped, wait for the Event
                     # (set in the task_wrapper)
-                    try:
-                        self.logger.debug(
-                            f"Stop: Waiting at Barrier for Process"
-                        )
-                        self.__stop_barrier.wait(timeout=TASK_STOP_TIMEOUT)
-                    except BrokenBarrierError:
-                        self.__stop_barrier = None
-                        raise exception.TaskIsNotRunningError(
-                            f"Timeout waiting for task to start (Name: {self.name})"
-                        )
+                    self.logger.debug(
+                        f"Stop: Waiting at Event for Process"
+                    )
+                    self.__stop_event.wait(timeout=TASK_STOP_TIMEOUT)
 
             # Wait for the process to finish
             self.__process.join(TASK_JOIN_TIMEOUT)
