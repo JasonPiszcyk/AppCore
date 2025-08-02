@@ -35,6 +35,7 @@ from appcore.appcore_base import AppCoreModuleBase
 from appcore.validation import is_valid_log_level_string
 from appcore.multitasking.task import Task, TaskType
 from appcore.multitasking.task_queue import TaskQueue
+from appcore.datastore.local import DataStoreLocal
 
 # Imports for python variable type hints
 from typing import Callable
@@ -435,6 +436,34 @@ class AppCoreManager(AppCoreModuleBase):
 
         # Return the logger
         return _logger
+
+
+    #
+    # LocalDataStore
+    #
+    def LocalDataStore(
+            self,
+    ) -> DataStoreLocal:
+        '''
+        Create a Local Datastore (using the multiprocessing manager)
+
+        Args:
+            None
+
+        Returns:
+            DataStoreLocal: An instance of a Local Datastore
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating local datastore")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return DataStoreLocal(
+            lock=_manager.Lock(),
+        )
 
 
 ###########################################################################
