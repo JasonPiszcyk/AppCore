@@ -320,6 +320,38 @@ class AppCoreModuleBase():
         return _log_console_handler
 
 
+    ###########################################################################
+    #
+    # Generic Helper Functions
+    #
+    ###########################################################################
+    #
+    # timestamp
+    #
+    @staticmethod
+    def timestamp(offset: int = 0):
+        '''
+        Create a timestamp (in seconds) since the epoch to now
+
+        Args:
+            offset (int): Number of seconds to offset the timestamp by
+
+        Returns:
+            int: The number of seconds since the epoch to now, +/- offset
+
+        Raises:
+            AssertionError:
+                When the offset is not an integer value
+        '''
+        assert isinstance(offset, int)
+
+        # Get the current time
+        _now = datetime.datetime.now(datetime.timezone.utc)
+
+        # Return the timestamp
+        return int(_now.timestamp()) + offset
+
+
 ###########################################################################
 #
 # In case this is run directly rather than imported...

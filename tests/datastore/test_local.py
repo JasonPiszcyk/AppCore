@@ -173,6 +173,27 @@ class Test_Local_Datastore():
         ) == DEFAULT_STR_VALUE
 
 
+    def test_expiry(self, manager):
+        ''' Test an expiring value '''
+        ds = manager.LocalDataStore(security="low")
+
+        assert not ds.has(SIMPLE_STR)
+ 
+        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, timeout=2)
+        assert ds.has(SIMPLE_STR)
+        assert ds.get(SIMPLE_STR) == SIMPLE_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE
+        ) == SIMPLE_STR_VALUE
+
+        time.sleep(3)
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE
+        ) == DEFAULT_STR_VALUE
+
+
 ###########################################################################
 #
 # In case this is run directly rather than imported...

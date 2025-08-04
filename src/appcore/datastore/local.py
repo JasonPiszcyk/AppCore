@@ -32,7 +32,7 @@ along with this program (See file: COPYING). If not, see
 
 # Local app modules
 from appcore.datastore.datastore_base import DataStoreBaseClass
-from appcore.conversion import to_json, from_json
+from appcore.conversion import to_json, from_json, set_value, DataType
 
 # Imports for python variable type hints
 from typing import Any
@@ -105,6 +105,8 @@ class DataStoreLocal(DataStoreBaseClass):
 
         # Private Attributes
         self.__data: dict = {}
+        self.__data_expiry: list = []
+
         self.__lock: LockType = lock
 
         # Attributes
@@ -115,6 +117,47 @@ class DataStoreLocal(DataStoreBaseClass):
     # Properties
     #
     ###########################################################################
+
+
+    ###########################################################################
+    #
+    # Maintenance Functions
+    #
+    ###########################################################################
+    #
+    # __item_maintenance
+    #
+    def __item_maintenance(self):
+        '''
+        Perform maintenance on items (such as expiry)
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        # Process the expiry list
+        _now = self.timestamp()
+        _sorted_expiry_list = sorted(self.__data_expiry)
+
+        # Use a copy of the expiry list so we can change it during processing
+        for _entry in _sorted_expiry_list:
+            # Extract the timestamp from the key
+            _timestamp_str, _, _name = _entry.partition("__")
+            _timestamp = set_value(_timestamp_str, DataType.INT, default=0)            
+
+            # Stop processing if the timestamp is in the future
+            if _now < _timestamp: break
+
+            # Remove the entry (and the expiry record)
+            self.__lock.acquire()
+            if _name in self.__data: del self.__data[_name]
+            self.__data_expiry.remove(_entry)
+            self.__lock.release()
 
 
     ###########################################################################
@@ -141,6 +184,7 @@ class DataStoreLocal(DataStoreBaseClass):
         Raises:
             None
         '''
+        self.__item_maintenance()
         return name in self.__data
 
 
@@ -167,6 +211,7 @@ class DataStoreLocal(DataStoreBaseClass):
         Raises:
             None
         '''
+        self.__item_maintenance()
         if not self.has(name): return default
 
         _value = self.__data[name]
@@ -186,7 +231,8 @@ class DataStoreLocal(DataStoreBaseClass):
             self,
             name: str = "",
             value: Any = None,
-            encrypt: bool = False
+            encrypt: bool = False,
+            timeout: int = 0
     ) -> None:
         '''
         Set a value for an item
@@ -195,13 +241,21 @@ class DataStoreLocal(DataStoreBaseClass):
             name (str): The name of the item to set
             value (Any): Value to set the item to
             encrypt (bool): If True, attempt to encrypt the value
+            timeout (int): The number of seconds before the item should be
+                deleted (0 = never delete)
 
         Returns:
             None
 
         Raises:
-            None
+            AssertionError:
+                When timeout is not zero or a positive integer
         '''
+        assert isinstance(timeout, int), "Timeout value must be an integer"
+        assert timeout >= 0, "Timeout value must be a postive integer"
+
+        self.__item_maintenance()
+
         # Encrypt the value if required
         if encrypt:
             # Convert to JSON, Encrypt
@@ -211,6 +265,14 @@ class DataStoreLocal(DataStoreBaseClass):
         # Set the value
         self.__lock.acquire()
         self.__data[name] = value
+
+        # Set the expiry info for the item if required
+        if timeout > 0:
+            _timestamp = self.timestamp(offset=timeout)
+
+            # Append the item name to prevent duplicate keys/timestamps
+            self.__data_expiry.append(f"{_timestamp}__{name}")
+
         self.__lock.release()
 
 
@@ -233,6 +295,8 @@ class DataStoreLocal(DataStoreBaseClass):
         Raises:
             None
         '''
+        self.__item_maintenance()
+
         if self.has(name):
             self.__lock.acquire()
             del self.__data[name]
