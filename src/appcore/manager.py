@@ -443,12 +443,20 @@ class AppCoreManager(AppCoreModuleBase):
     #
     def LocalDataStore(
             self,
+            password: str = "",
+            salt: bytes = b"",
+            security: str = "high"
     ) -> DataStoreLocal:
         '''
         Create a Local Datastore (using the multiprocessing manager)
 
         Args:
-            None
+            password: (str): Password used to derive the encryption key - A
+                random password will be used if none provided
+            salt: (bytes): Binary string containing the salt - A default
+                salt will be used in none provided
+            security (str): Determines the computation time of the key.  Must
+                be one of "low", "medium", or "high"
 
         Returns:
             DataStoreLocal: An instance of a Local Datastore
@@ -463,6 +471,12 @@ class AppCoreManager(AppCoreModuleBase):
 
         return DataStoreLocal(
             lock=_manager.Lock(),
+            password=password,
+            salt=salt,
+            security=security,
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
         )
 
 

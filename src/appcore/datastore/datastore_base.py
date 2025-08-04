@@ -81,6 +81,7 @@ class DataStoreBaseClass(AppCoreModuleBase):
             *args,
             password: str = "",
             salt: bytes = b"",
+            security: str = "high",
             **kwargs
     ):
         '''
@@ -93,6 +94,8 @@ class DataStoreBaseClass(AppCoreModuleBase):
                 random password will be used if none provided
             salt: (bytes): Binary string containing the salt - A default
                 salt will be used in none provided
+            security (str): Determines the computation time of the key.  Must
+                be one of "low", "medium", or "high"
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -108,9 +111,11 @@ class DataStoreBaseClass(AppCoreModuleBase):
         if not salt:
             salt = b"a%Z\xe9\xc3N\x96\x82\xc5|#e\xfd1b&"
 
+        self.logger.debug("Creating Encryption Key")
         self._salt, self._key = crypto_tools.fernet.derive_key(
-            salt=salt, password=password
+            salt=salt, password=password, security=security
         )
+        self.logger.debug("Encryption Key has been created")
 
         # Attributes
 

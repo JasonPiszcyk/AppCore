@@ -26,6 +26,7 @@ from datetime import datetime
 from appcore.multitasking.message_frame import MessageType
 import appcore.multitasking.exception as exception
 from appcore.typing import TaskStatus
+import crypto_tools
 
 #
 # Globals
@@ -65,21 +66,111 @@ def stop_queue_listener(queue=None):
 class Test_Local_Datastore():
     def test_basic(self, manager):
         ''' Test the basics has/get/set/delete '''
-        ds = manager.LocalDataStore()
+        ds = manager.LocalDataStore(security="low")
 
         assert not ds.has(SIMPLE_STR)
         assert not ds.get(SIMPLE_STR)
-        assert ds.get(SIMPLE_STR, default=DEFAULT_STR_VALUE) == DEFAULT_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE
+        ) == DEFAULT_STR_VALUE
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE)
         assert ds.has(SIMPLE_STR)
         assert ds.get(SIMPLE_STR) == SIMPLE_STR_VALUE
-        assert ds.get(SIMPLE_STR, default=DEFAULT_STR_VALUE) == SIMPLE_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE
+        ) == SIMPLE_STR_VALUE
 
         ds.delete(SIMPLE_STR)
         assert not ds.has(SIMPLE_STR)
         assert not ds.get(SIMPLE_STR)
-        assert ds.get(SIMPLE_STR, default=DEFAULT_STR_VALUE) == DEFAULT_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE
+        ) == DEFAULT_STR_VALUE
+
+
+    def test_encryption_no_password(self, manager):
+        ''' Test encryption - no password supplied '''
+        # Use 'low' security as it is just quicker to compute the key
+        ds = manager.LocalDataStore(security="low")
+
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR, decrypt=True)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == DEFAULT_STR_VALUE
+
+        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
+        assert ds.has(SIMPLE_STR)
+        assert ds.get(SIMPLE_STR) != SIMPLE_STR_VALUE
+        assert ds.get(SIMPLE_STR, decrypt=True) == SIMPLE_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == SIMPLE_STR_VALUE
+
+        ds.delete(SIMPLE_STR)
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == DEFAULT_STR_VALUE
+
+
+    def test_encryption_with_password(self, manager):
+        ''' Test encryption - simple password supplied '''
+        # Use 'low' security as it is just quicker to compute the key
+        ds = manager.LocalDataStore(password="a password", security="low")
+
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR, decrypt=True)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == DEFAULT_STR_VALUE
+
+        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
+        assert ds.has(SIMPLE_STR)
+        assert ds.get(SIMPLE_STR) != SIMPLE_STR_VALUE
+        assert ds.get(SIMPLE_STR, decrypt=True) == SIMPLE_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == SIMPLE_STR_VALUE
+
+        ds.delete(SIMPLE_STR)
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == DEFAULT_STR_VALUE
+
+
+    def test_encryption_with_password_salt(self, manager):
+        ''' Test encryption - simple password supplied '''
+        # Use 'low' security as it is just quicker to compute the key
+        ds = manager.LocalDataStore(
+            password="a password",
+            salt=crypto_tools.fernet.generate_salt(),
+            security="low")
+
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR, decrypt=True)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == DEFAULT_STR_VALUE
+
+        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
+        assert ds.has(SIMPLE_STR)
+        assert ds.get(SIMPLE_STR) != SIMPLE_STR_VALUE
+        assert ds.get(SIMPLE_STR, decrypt=True) == SIMPLE_STR_VALUE
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == SIMPLE_STR_VALUE
+
+        ds.delete(SIMPLE_STR)
+        assert not ds.has(SIMPLE_STR)
+        assert not ds.get(SIMPLE_STR)
+        assert ds.get(
+            SIMPLE_STR, default=DEFAULT_STR_VALUE, decrypt=True
+        ) == DEFAULT_STR_VALUE
 
 
 ###########################################################################
