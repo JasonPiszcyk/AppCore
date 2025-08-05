@@ -31,6 +31,8 @@ from appcore.typing import TaskStatus
 EXCEPTION = RuntimeError
 EXCEPTION_DESC = "The exception description"
 
+SHORT_LIVED_RETURN = "short lived task return string"
+
 
 ###########################################################################
 #
@@ -49,6 +51,13 @@ def simple_event_target(test_event=None):
 def simple_event_stop(test_event=None):
     assert test_event
     test_event.set()
+
+
+#
+# Task to end by itself
+#
+def short_lived_event_target():
+    return SHORT_LIVED_RETURN
 
 
 #
@@ -90,7 +99,7 @@ class Test_Task_Threads():
         # Start the task
         _task.start()
 
-         # Start the task
+        # Stop the task
         _task.stop()
 
 
@@ -153,6 +162,32 @@ class Test_Task_Threads():
         assert _results.exception_desc == EXCEPTION_DESC
         assert str(_results.exception_stack).find(
                 f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
+
+
+    def test_task_short_lived(self, manager):
+        ''' 
+        Run a task (as thread) that ends itself and returns a value
+        '''
+        # Add a task
+        _task = manager.Thread(
+            name = f"{self.__class__.id_prefix} - Short Lived",
+            target = short_lived_event_target,
+        )
+
+        # Start the task
+        _task.start()
+
+        # What for the task to complete
+        while _task.status == TaskStatus.RUNNING.value:
+            time.sleep(0.1)
+        
+        # Clean the task (to clean it up / no zombie)
+        _task.cleanup()
+
+        # Check the results
+        _results = _task.results
+        assert _results.status == TaskStatus.COMPLETED.value
+        assert _results.return_value == SHORT_LIVED_RETURN
 
 
 #
@@ -244,6 +279,32 @@ class Test_Task_Process():
         assert _results.exception_desc == EXCEPTION_DESC
         assert str(_results.exception_stack).find(
                 f"{EXCEPTION.__name__}: {EXCEPTION_DESC}") >= 0
+
+
+    def test_task_short_lived(self, manager):
+        ''' 
+        Run a task (as process) that ends itself and returns a value
+        '''
+        # Add a task
+        _task = manager.Process(
+            name = f"{self.__class__.id_prefix} - Short Lived",
+            target = short_lived_event_target,
+        )
+
+        # Start the task
+        _task.start()
+
+        # What for the task to complete
+        while _task.status == TaskStatus.RUNNING.value:
+            time.sleep(0.1)
+        
+        # Stop the task (to clean it up / no zombie)
+        _task.cleanup()
+
+        # Check the results
+        _results = _task.results
+        assert _results.status == TaskStatus.COMPLETED.value
+        assert _results.return_value == SHORT_LIVED_RETURN
 
 
 ###########################################################################

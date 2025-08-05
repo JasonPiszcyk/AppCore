@@ -57,7 +57,7 @@ from appcore.typing import LoggingLevel
 #
 # Global Variables
 #
-
+CONSOLE_HANDLER_NAME = "TO_CONSOLE"
 
 ###########################################################################
 #
@@ -106,9 +106,7 @@ class AppCoreModuleBase():
         # Private Attributes
         self._log_level: str = LoggingLevel.INFO.value
         self._log_file: str = ""
-        self._log_file_handler: HandlerType | None = None
         self._log_to_console: bool = False
-        self._log_console_handler: HandlerType | None = None
 
         # Attributes
 
@@ -162,14 +160,17 @@ class AppCoreModuleBase():
         ''' The log file for the module '''
         assert isinstance(value, str), f"'{value}' must be a string"
 
+        _old_handler_name = self._log_file
         self._log_file = value
 
-        if not self._log_file:
-            if self._log_file_handler:
-                self.logger.removeHandler(self._log_file_handler)
+        if not self._log_file and _old_handler_name:
+            # Remove the old handler if it exists
+            for _handler in self.logger.handlers.copy():
+                if _handler.name == _old_handler_name:
+                    self.logger.removeHandler(_handler)
 
-        else:
-            self._log_file_handler = self.logging_set_file(
+        if self._log_file:
+            _ = self.logging_set_file(
                 logger=self.logger,
                 filename=self._log_file
             )
@@ -191,11 +192,13 @@ class AppCoreModuleBase():
 
         self._log_to_console = value
         if not self._log_to_console:
-            if self._log_console_handler:
-                self.logger.removeHandler(self._log_console_handler)
+            # Remove the old handler if it exists
+            for _handler in self.logger.handlers.copy():
+                if _handler.name == CONSOLE_HANDLER_NAME:
+                    self.logger.removeHandler(_handler)
 
         else:
-            self._log_console_handler = self.logging_to_console(
+            _ = self.logging_to_console(
                 logger=self.logger
             )
 
@@ -276,6 +279,7 @@ class AppCoreModuleBase():
 
         # Set the log format and add the handler
         _log_file_handler.setFormatter(_log_format)
+        _log_file_handler.name=filename
         logger.addHandler(_log_file_handler)
 
         # Return the handler in case it needs to be stored
@@ -314,6 +318,7 @@ class AppCoreModuleBase():
 
         # Set the log format and add the handler
         _log_console_handler.setFormatter(_log_format)
+        _log_console_handler.name = CONSOLE_HANDLER_NAME
         logger.addHandler(_log_console_handler)
 
         # Return the handler in case it needs to be stored

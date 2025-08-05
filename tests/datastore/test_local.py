@@ -68,13 +68,17 @@ class Test_Local_Datastore():
         ''' Test the basics has/get/set/delete '''
         ds = manager.LocalDataStore(security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE)
         self._assert_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
 
     def test_encryption_no_password(self, manager):
@@ -82,13 +86,19 @@ class Test_Local_Datastore():
         # Use 'low' security as it is just quicker to compute the key
         ds = manager.LocalDataStore(security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
-        self._assert_set_enc(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set_enc(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
 
     def test_encryption_with_password(self, manager):
@@ -96,13 +106,19 @@ class Test_Local_Datastore():
         # Use 'low' security as it is just quicker to compute the key
         ds = manager.LocalDataStore(password="a password", security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
-        self._assert_set_enc(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set_enc(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
 
     def test_encryption_with_password_salt(self, manager):
@@ -113,26 +129,36 @@ class Test_Local_Datastore():
             salt=crypto_tools.fernet.generate_salt(),
             security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
-        self._assert_set_enc(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set_enc(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
 
     def test_expiry(self, manager):
         ''' Test an expiring value '''
         ds = manager.LocalDataStore(security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
  
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, timeout=2)
         self._assert_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
 
         time.sleep(3)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
+        )
 
 
 ###########################################################################

@@ -90,7 +90,8 @@ class DataStoreSystem(DataStoreBaseClass):
         Args:
             *args (Undef): Unnamed arguments to be passed to the constructor
                 of the inherited process
-            storage (dict): SyncManger dict
+            data (dict): SyncManger dict to store the data
+            data_expiry (list): SyncManger List to store the expiry info
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 

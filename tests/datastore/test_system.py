@@ -31,9 +31,36 @@ import crypto_tools
 #
 # Globals
 #
-DEFAULT_STR_VALUE = "default_string_value"
+DEFAULT_SIMPLE_STR_VALUE = "default_string_value"
 SIMPLE_STR = "simple.variable"
 SIMPLE_STR_VALUE = "Value for simple variable"
+CHANGE_SIMPLE_STR_VALUE = "New value for the simple variable"
+
+DEFAULT_TASK_STR_VALUE = "default_string_value_for_task"
+TASK_STR = "task.variable"
+TASK_STR_VALUE = "Value for task variable"
+CHANGE_TASK_STR_VALUE = "New value for the task variable"
+
+###########################################################################
+#
+# Functions to run in the tasks
+#
+###########################################################################
+#
+# Task to set a value
+#
+def shared_value_target(system_ds=None, item=None):
+    assert system_ds
+
+    # Make sure the value exists
+    assert system_ds.has(item)
+
+    # Change the value
+    system_ds.set(item, CHANGE_TASK_STR_VALUE, encrypt=True)
+
+    # Return the original value + new value
+    return TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
+
 
 
 ###########################################################################
@@ -68,13 +95,19 @@ class Test_System_Datastore():
         ''' Test the basics has/get/set/delete '''
         ds = manager.SystemDataStore(security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE)
-        self._assert_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
 
     def test_encryption_no_password(self, manager):
@@ -82,13 +115,19 @@ class Test_System_Datastore():
         # Use 'low' security as it is just quicker to compute the key
         ds = manager.SystemDataStore(security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
-        self._assert_set_enc(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set_enc(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
 
     def test_encryption_with_password(self, manager):
@@ -96,13 +135,19 @@ class Test_System_Datastore():
         # Use 'low' security as it is just quicker to compute the key
         ds = manager.SystemDataStore(password="a password", security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
-        self._assert_set_enc(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set_enc(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
 
     def test_encryption_with_password_salt(self, manager):
@@ -113,26 +158,124 @@ class Test_System_Datastore():
             salt=crypto_tools.fernet.generate_salt(),
             security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
-        self._assert_set_enc(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set_enc(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         ds.delete(SIMPLE_STR)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
 
     def test_expiry(self, manager):
         ''' Test an expiring value '''
         ds = manager.SystemDataStore(security="low")
 
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
  
         ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, timeout=2)
-        self._assert_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
 
         time.sleep(3)
-        self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
+        self._assert_not_set(
+            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+        )
+
+
+    def test_share_thread(self, manager):
+        ''' Test sharing a value to a thread '''
+        ds = manager.SystemDataStore(security="low")
+
+        # Create an item
+        ds.set(TASK_STR, TASK_STR_VALUE, encrypt=True)
+        self._assert_set_enc(
+            ds, TASK_STR, TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+        )
+
+        # Add a task
+        _kwargs = {
+            "system_ds": ds,
+            "item": TASK_STR,
+        }
+
+        _task = manager.Thread(
+            name = f"System Datastore - Test Share Thread",
+            target = shared_value_target,
+            kwargs = _kwargs
+        )
+
+        # Start the task
+        _task.start()
+
+        # What for the task to complete
+        while _task.status == TaskStatus.RUNNING.value:
+            time.sleep(0.1)
+        
+        # Stop the task (to clean it up / no zombie)
+        _task.cleanup()
+
+        # Check the results
+        _results = _task.results
+        assert _results.status == TaskStatus.COMPLETED.value
+        assert _results.return_value == TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
+
+        # Check the value of the item
+        self._assert_set_enc(
+            ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+        )
+
+
+    def test_share_process(self, manager):
+        ''' Test sharing a value to a process '''
+        ds = manager.SystemDataStore(security="low")
+
+        # Create an item
+        ds.set(TASK_STR, TASK_STR_VALUE, encrypt=True)
+        self._assert_set_enc(
+            ds, TASK_STR, TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+        )
+
+        # Add a task
+        _kwargs = {
+            "system_ds": ds,
+            "item": TASK_STR,
+        }
+
+        _task = manager.Process(
+            name = f"System Datastore - Test Share Process",
+            target = shared_value_target,
+            kwargs = _kwargs
+        )
+
+        # Start the task
+        _task.start()
+
+        # What for the task to complete
+        while _task.status == TaskStatus.RUNNING.value:
+            time.sleep(0.1)
+        
+        # Stop the task (to clean it up / no zombie)
+        _task.cleanup()
+
+        # Check the results
+        _results = _task.results
+        assert _results.status == TaskStatus.COMPLETED.value
+        assert _results.return_value == TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
+
+        # Check the value of the item
+        self._assert_set_enc(
+            ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+        )
 
 
 ###########################################################################

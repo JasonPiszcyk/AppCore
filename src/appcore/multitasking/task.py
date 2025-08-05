@@ -290,6 +290,59 @@ class Task(AppCoreModuleBase):
 
 
     #
+    # cleanup
+    #
+    def cleanup(self) -> None:
+        '''
+        Cleanup a stopped task
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            TaskIsNotRunningError:
+                When the task cannot be found
+            TaskIsRunningError:
+                When the task cannot be shutdown correctly
+        '''
+        if self.__task_type == "thread":
+            if not  self.__thread:
+                raise exception.TaskIsNotRunningError(
+                    f"Cannot stop thread as no info found (Task: {self.name})"
+                )
+
+            # Wait for the thread to finish
+            self.__thread.join(TASK_JOIN_TIMEOUT)
+
+            if self.__thread.is_alive():
+                raise exception.TaskIsRunningError(
+                    f"Thread failed to stop (Task: {self.name})"
+                )
+
+            self.__thread = None
+
+        elif self.__task_type == "process":
+            if not  self.__process:
+                raise exception.TaskIsNotRunningError(
+                    f"Cannot stop process as no info found (Task: {self.name})"
+                )
+
+            # Wait for the process to finish
+            self.__process.join(TASK_JOIN_TIMEOUT)
+
+            if self.__process.is_alive():
+                raise exception.TaskIsRunningError(
+                    f"Process failed to stop (Task: {self.name})"
+                )
+
+            self.__process.close()
+            self.__process = None
+
+
+    #
     # stop
     #
     def stop(self) -> None:
@@ -308,6 +361,9 @@ class Task(AppCoreModuleBase):
             TaskIsRunningError:
                 When the task cannot be shutdown correctly
         '''
+        #
+        # Run the stop function
+        #
         if self.__task_type == "thread":
             if not  self.__thread:
                 raise exception.TaskIsNotRunningError(
@@ -332,16 +388,6 @@ class Task(AppCoreModuleBase):
                     self.__stop_event.wait(timeout=TASK_STOP_TIMEOUT)
 
 
-            # Wait for the thread to finish
-            self.__thread.join(TASK_JOIN_TIMEOUT)
-
-            if self.__thread.is_alive():
-                raise exception.TaskIsRunningError(
-                    f"Thread failed to stop (Task: {self.name})"
-                )
-
-            self.__thread = None
-
         elif self.__task_type == "process":
             if not  self.__process:
                 raise exception.TaskIsNotRunningError(
@@ -365,16 +411,11 @@ class Task(AppCoreModuleBase):
                     )
                     self.__stop_event.wait(timeout=TASK_STOP_TIMEOUT)
 
-            # Wait for the process to finish
-            self.__process.join(TASK_JOIN_TIMEOUT)
 
-            if self.__process.is_alive():
-                raise exception.TaskIsRunningError(
-                    f"Process failed to stop (Task: {self.name})"
-                )
-
-            self.__process.close()
-            self.__process = None
+        #
+        # Run the cleanup
+        #
+        self.cleanup()
 
 
 ###########################################################################
