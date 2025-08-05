@@ -36,6 +36,7 @@ from appcore.validation import is_valid_log_level_string
 from appcore.multitasking.task import Task, TaskType
 from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
+from appcore.datastore.system import DataStoreSystem
 
 # Imports for python variable type hints
 from typing import Callable
@@ -479,6 +480,48 @@ class AppCoreManager(AppCoreModuleBase):
             log_to_console=self.log_to_console
         )
 
+
+    #
+    # SystemDataStore
+    #
+    def SystemDataStore(
+            self,
+            password: str = "",
+            salt: bytes = b"",
+            security: str = "high"
+    ) -> DataStoreSystem:
+        '''
+        Create a System Datastore (using the multiprocessing manager)
+
+        Args:
+            password: (str): Password used to derive the encryption key - A
+                random password will be used if none provided
+            salt: (bytes): Binary string containing the salt - A default
+                salt will be used in none provided
+            security (str): Determines the computation time of the key.  Must
+                be one of "low", "medium", or "high"
+
+        Returns:
+            DataStoreSystem: An instance of a System Datastore
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating system datastore")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return DataStoreSystem(
+            data=_manager.dict(),
+            data_expiry=_manager.list(),
+            password=password,
+            salt=salt,
+            security=security,
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
 
 ###########################################################################
 #

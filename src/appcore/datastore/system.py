@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
-Datastore - Local
+Datastore - System
 
-Datastore stores information locally in a shared dictionary.
+Datastore stores information in a shared SyncManager dictionary.
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -36,8 +36,7 @@ from appcore.conversion import to_json, from_json, set_value, DataType
 
 # Imports for python variable type hints
 from typing import Any
-from threading import Lock as LockType
-
+from multiprocessing.managers import DictProxy, ListProxy
 
 ###########################################################################
 #
@@ -61,15 +60,15 @@ from threading import Lock as LockType
 
 ###########################################################################
 #
-# DataStoreLocal Class Definition
+# DataStoreSystem Class Definition
 #
 ###########################################################################
-class DataStoreLocal(DataStoreBaseClass):
+class DataStoreSystem(DataStoreBaseClass):
     '''
-    Class to describe the local datastore.
+    Class to describe the system datastore.
 
     The data is stored in a dictionary that is made available globally
-    throughout the application
+    throughout the host system via SyncManager
 
     Attributes:
         None
@@ -81,7 +80,8 @@ class DataStoreLocal(DataStoreBaseClass):
     def __init__(
             self,
             *args,
-            lock: LockType | None = None,
+            data: DictProxy[Any, Any] | None = None,
+            data_expiry: ListProxy[Any] | None = None,
             **kwargs
     ):
         '''
@@ -90,7 +90,7 @@ class DataStoreLocal(DataStoreBaseClass):
         Args:
             *args (Undef): Unnamed arguments to be passed to the constructor
                 of the inherited process
-            lock (Lock): A SyncManager lock use to protect the dict
+            storage (dict): SyncManger dict
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -99,17 +99,18 @@ class DataStoreLocal(DataStoreBaseClass):
 
         Raises:
             AssertionError:
-                When a SyncManager lock is not supplied
+                When a SyncManager dict and list are not supplied
         '''
-        assert lock, f"A lock is required to implement the local datastore"
+        assert isinstance(data, DictProxy), \
+            f"A SyncManager dict is required to implement the system datastore"
+        assert isinstance(data_expiry, ListProxy), \
+            f"A SyncManager list is required to implement the system datastore"
 
         super().__init__(*args, **kwargs)
 
         # Private Attributes
-        self.__data: dict = {}
-        self.__data_expiry: list = []
-
-        self.__lock: LockType = lock
+        self.__data: DictProxy[Any, Any] = data
+        self.__data_expiry: ListProxy[Any] = data_expiry
 
         # Attributes
 
@@ -156,10 +157,8 @@ class DataStoreLocal(DataStoreBaseClass):
             if _now < _timestamp: break
 
             # Remove the entry (and the expiry record)
-            self.__lock.acquire()
             if _name in self.__data: del self.__data[_name]
             self.__data_expiry.remove(_entry)
-            self.__lock.release()
 
 
     ###########################################################################
@@ -265,7 +264,6 @@ class DataStoreLocal(DataStoreBaseClass):
             value = self._encrypt(_json_value)
 
         # Set the value
-        self.__lock.acquire()
         self.__data[name] = value
 
         # Set the expiry info for the item if required
@@ -274,8 +272,6 @@ class DataStoreLocal(DataStoreBaseClass):
 
             # Append the item name to prevent duplicate keys/timestamps
             self.__data_expiry.append(f"{_timestamp}__{name}")
-
-        self.__lock.release()
 
 
     #
@@ -299,10 +295,7 @@ class DataStoreLocal(DataStoreBaseClass):
         '''
         self.__item_maintenance()
 
-        if self.has(name):
-            self.__lock.acquire()
-            del self.__data[name]
-            self.__lock.release()
+        if self.has(name): del self.__data[name]
 
 
 ###########################################################################

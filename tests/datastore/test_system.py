@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-PyTest - Test of local datostore functions
+PyTest - Test of system datostore functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -44,7 +44,7 @@ SIMPLE_STR_VALUE = "Value for simple variable"
 #
 # Local
 #
-class Test_Local_Datastore():
+class Test_System_Datastore():
     def _assert_not_set(self, ds, item, value, default):
         assert not ds.has(item)
         assert not ds.get(item)
@@ -66,7 +66,7 @@ class Test_Local_Datastore():
 
     def test_basic(self, manager):
         ''' Test the basics has/get/set/delete '''
-        ds = manager.LocalDataStore(security="low")
+        ds = manager.SystemDataStore(security="low")
 
         self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
 
@@ -80,7 +80,7 @@ class Test_Local_Datastore():
     def test_encryption_no_password(self, manager):
         ''' Test encryption - no password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.LocalDataStore(security="low")
+        ds = manager.SystemDataStore(security="low")
 
         self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
 
@@ -94,7 +94,7 @@ class Test_Local_Datastore():
     def test_encryption_with_password(self, manager):
         ''' Test encryption - simple password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.LocalDataStore(password="a password", security="low")
+        ds = manager.SystemDataStore(password="a password", security="low")
 
         self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
 
@@ -108,7 +108,7 @@ class Test_Local_Datastore():
     def test_encryption_with_password_salt(self, manager):
         ''' Test encryption - simple password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.LocalDataStore(
+        ds = manager.SystemDataStore(
             password="a password",
             salt=crypto_tools.fernet.generate_salt(),
             security="low")
@@ -124,7 +124,7 @@ class Test_Local_Datastore():
 
     def test_expiry(self, manager):
         ''' Test an expiring value '''
-        ds = manager.LocalDataStore(security="low")
+        ds = manager.SystemDataStore(security="low")
 
         self._assert_not_set(ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE)
  
