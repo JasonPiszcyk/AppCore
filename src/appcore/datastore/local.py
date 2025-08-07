@@ -219,7 +219,7 @@ class DataStoreLocal(DataStoreBaseClass):
         _value = self.__data[name]
 
         if decrypt:
-            # Decrypt, covert from JSON
+            # Decrypt, convert from JSON
             _decrypted_value = self._decrypt(_value)
             _value = from_json(_decrypted_value)
 

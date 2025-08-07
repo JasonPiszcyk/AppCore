@@ -53,14 +53,19 @@ type KeywordDictType = dict[str, Any]
 # DataType
 #
 class DataType(enum.Enum):
+    NONE            = "none"
     INT             = "int"
     INTEGER         = "integer"
+    FLOAT           = "float"
     STR             = "str"
     STRING          = "string"
     BOOL            = "bool"
     BOOLEAN         = "boolean"
     DICT            = "dict"
     DICTIONARY      = "dictionary"
+    LIST            = "list"
+    TUPLE           = "tuple"
+    UUID            = "uuid"
     UUID1           = "uuid1"
     UUID3           = "uuid3"
     UUID4           = "uuid4"

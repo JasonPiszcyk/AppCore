@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Datastore - System
+Datastore - Redis
 
 Datastore stores information in a shared SyncManager dictionary.
 
@@ -29,14 +29,17 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+from redis import Redis
 
 # Local app modules
 from appcore.datastore.datastore_base import DataStoreBaseClass
-from appcore.conversion import to_json, from_json, set_value, DataType
+import appcore.datastore.exception as exception
+from appcore.conversion import to_json, from_json
 
 # Imports for python variable type hints
 from typing import Any
-from multiprocessing.managers import DictProxy, ListProxy
+from appcore.typing import KeywordDictType
+
 
 ###########################################################################
 #
@@ -60,15 +63,14 @@ from multiprocessing.managers import DictProxy, ListProxy
 
 ###########################################################################
 #
-# DataStoreSystem Class Definition
+# DataStoreRedis Class Definition
 #
 ###########################################################################
-class DataStoreSystem(DataStoreBaseClass):
+class DataStoreRedis(DataStoreBaseClass):
     '''
-    Class to describe the system datastore.
+    Class to describe the Redis datastore.
 
-    The data is stored in a dictionary that is made available globally
-    throughout the host system via SyncManager
+    The data is stored in Redis
 
     Attributes:
         None
@@ -80,8 +82,6 @@ class DataStoreSystem(DataStoreBaseClass):
     def __init__(
             self,
             *args,
-            data: DictProxy[Any, Any] | None = None,
-            data_expiry: ListProxy[Any] | None = None,
             **kwargs
     ):
         '''
@@ -90,8 +90,6 @@ class DataStoreSystem(DataStoreBaseClass):
         Args:
             *args (Undef): Unnamed arguments to be passed to the constructor
                 of the inherited process
-            data (dict): SyncManger dict to store the data
-            data_expiry (list): SyncManger List to store the expiry info
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -99,19 +97,29 @@ class DataStoreSystem(DataStoreBaseClass):
             None
 
         Raises:
-            AssertionError:
-                When a SyncManager dict and list are not supplied
+            None
         '''
-        assert isinstance(data, DictProxy), \
-            f"A SyncManager dict is required to implement the system datastore"
-        assert isinstance(data_expiry, ListProxy), \
-            f"A SyncManager list is required to implement the system datastore"
+        # Extract the args for the redis connection (prefixed with 'redis_')
+        _redis_args:KeywordDictType = {}
+        _new_kwargs:KeywordDictType = {}
 
-        super().__init__(*args, **kwargs)
+        for _key, _value in kwargs.items():
+            if _key.find("redis_") == 0:
+                _new_key = _key.replace("redis_", "")
+                _redis_args[_new_key] = _value
+
+            else:
+                # Add this to the remaining kwargs
+                _new_kwargs[_key] = _value
+
+        super().__init__(*args, **_new_kwargs)
+
+        if not "port" in _redis_args: _redis_args["port"] = 6379
+        _redis_args["decode_responses"] = True
 
         # Private Attributes
-        self.__data: DictProxy[Any, Any] = data
-        self.__data_expiry: ListProxy[Any] = data_expiry
+        self.__redis_args = _redis_args
+        self.__redis: Redis | None = None
 
         # Attributes
 
@@ -121,6 +129,60 @@ class DataStoreSystem(DataStoreBaseClass):
     # Properties
     #
     ###########################################################################
+    #
+    # connected
+    #
+    @property
+    def connected(self) -> bool:
+        ''' Indicator if connected to Redis '''
+        return True if self.__redis else False
+
+
+    ###########################################################################
+    #
+    # Redis Connectivity
+    #
+    ###########################################################################
+    #
+    # connect
+    #
+    def connect(self):
+        '''
+        Connect to a redis datastore
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self.__redis: Redis | None = Redis(**self.__redis_args)
+
+        # Try an action on redis to see if connection works
+        # Should raise an exception if connection doesn't work
+        self.__redis.exists("__connection_test__")
+
+
+    #
+    # disconnect
+    #
+    def disconnect(self):
+        '''
+        Disconnect from a redis datastore
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self.__redis: Redis | None = None
 
 
     ###########################################################################
@@ -133,7 +195,7 @@ class DataStoreSystem(DataStoreBaseClass):
     #
     def __item_maintenance(self):
         '''
-        Perform maintenance on items (such as expiry)
+        Perform maintenance on items
 
         Args:
             None
@@ -144,22 +206,8 @@ class DataStoreSystem(DataStoreBaseClass):
         Raises:
             None
         '''
-        # Process the expiry list
-        _now = self.timestamp()
-        _sorted_expiry_list = sorted(self.__data_expiry)
-
-        # Use a copy of the expiry list so we can change it during processing
-        for _entry in _sorted_expiry_list:
-            # Extract the timestamp from the key
-            _timestamp_str, _, _name = _entry.partition("__")
-            _timestamp = set_value(_timestamp_str, DataType.INT, default=0)            
-
-            # Stop processing if the timestamp is in the future
-            if _now < _timestamp: break
-
-            # Remove the entry (and the expiry record)
-            if _name in self.__data: del self.__data[_name]
-            self.__data_expiry.remove(_entry)
+        # Nothing to do as Redis handles item expiry
+        pass
 
 
     ###########################################################################
@@ -186,8 +234,18 @@ class DataStoreSystem(DataStoreBaseClass):
         Raises:
             None
         '''
+        if not self.__redis:
+            raise exception.DataStoreRedisNotConnected(
+                "A connection has not been established to Redis"
+            )
+
         self.__item_maintenance()
-        return name in self.__data
+
+        # 'exists' returns a number and our return is boolean, so be explicit
+        if self.__redis.exists(name):
+            return True
+        else:
+            return False
 
 
     #
@@ -213,16 +271,24 @@ class DataStoreSystem(DataStoreBaseClass):
         Raises:
             None
         '''
+        if not self.__redis:
+            raise exception.DataStoreRedisNotConnected(
+                "A connection has not been established to Redis"
+            )
+
         self.__item_maintenance()
         if not self.has(name): return default
 
-        _value = self.__data[name]
         # Check the type of the value
-        if not isinstance(_value, str):
-            raise TypeError(f"Type not supported: {type(_value)}")
+        _value_type = self.__redis.type(name)
+        if _value_type == "string":
+            # String
+            _value = str(self.__redis.get(name))
+
+        else:
+            raise TypeError(f"Redis variable type not supported: {_value_type}")
 
         if decrypt:
-            # Decrypt, convert from JSON
             _decrypted_value = self._decrypt(_value)
         else:
             _decrypted_value = _value
@@ -260,6 +326,11 @@ class DataStoreSystem(DataStoreBaseClass):
         assert isinstance(timeout, int), "Timeout value must be an integer"
         assert timeout >= 0, "Timeout value must be a postive integer"
 
+        if not self.__redis:
+            raise exception.DataStoreRedisNotConnected(
+                "A connection has not been established to Redis"
+            )
+
         self.__item_maintenance()
 
         # Always store values in JSON format
@@ -273,15 +344,11 @@ class DataStoreSystem(DataStoreBaseClass):
         else:
             _encrypted_value = _json_value
 
-        # Set the value
-        self.__data[name] = _encrypted_value
+        self.__redis.set(name, _encrypted_value)
 
-        # Set the expiry info for the item if required
-        if timeout > 0:
-            _timestamp = self.timestamp(offset=timeout)
-
-            # Append the item name to prevent duplicate keys/timestamps
-            self.__data_expiry.append(f"{_timestamp}__{name}")
+        # Set the expiry value
+        if timeout: 
+            self.__redis.expire(name, timeout)
 
 
     #
@@ -303,9 +370,16 @@ class DataStoreSystem(DataStoreBaseClass):
         Raises:
             None
         '''
-        self.__item_maintenance()
+        if not self.__redis:
+            raise exception.DataStoreRedisNotConnected(
+                "A connection has not been established to Redis"
+            )
 
-        if self.has(name): del self.__data[name]
+        self.__item_maintenance()
+        if not self.has(name): return
+
+        # 'delete' should raise an exception if there is a problem
+        self.__redis.delete(name)
 
 
 ###########################################################################

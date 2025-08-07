@@ -58,48 +58,8 @@ along with this program (See file: COPYING). If not, see
 # Exceptions
 #
 ###########################################################################
-class MultiTaskingManagerNotFoundError(Exception):
-    ''' The multiprocessing resource manager has not been configured '''
-    pass
-
-
-class MultiTaskingQueueNotFoundError(Exception):
-    ''' A queue instance canot be found '''
-    pass
-
-
-class MultiTaskingEventNotFoundError(Exception):
-    ''' An event instance canot be found '''
-    pass
-
-
-class MultiTaskingBarrierNotFoundError(Exception):
-    ''' A barrier instance canot be found '''
-    pass
-
-
-class TaskIsRunningError(Exception):
-    ''' Task is already (or still) running '''
-    pass
-
-
-class TaskIsNotRunningError(Exception):
-    ''' Task is not running or start failed '''
-    pass
-
-
-class MultiTaskingQueueInvalidFormatError(Exception):
-    ''' Invalid format for queue message '''
-    pass
-
-
-class MultiTaskingQueueFrameExit(Exception):
-    ''' The queue frame contains the message exit Type '''
-    pass
-
-
-class MultiTaskingQueueSystemFrame(Exception):
-    ''' The queue frame is a system message frame (eg might be exit message) '''
+class DataStoreRedisNotConnected(Exception):
+    ''' A connection has not been established to Redis '''
     pass
 
 

@@ -80,10 +80,18 @@ def set_value(
     try:
         if type == DataType.INT or type == DataType.INTEGER:
             _val = int(data)
+        elif type == DataType.FLOAT:
+            _val = float(data)
         elif type == DataType.BOOL or type == DataType.BOOLEAN:
             _val = bool(data)
         elif type == DataType.DICT or type == DataType.DICTIONARY:
             _val = dict(data)
+        elif type == DataType.LIST:
+            _val = list(data)
+        elif type == DataType.TUPLE:
+            _val = tuple(data)
+        elif type == DataType.UUID:
+            _val = uuid.UUID(data)
         elif type == DataType.UUID1:
             _val = uuid.UUID(data, version=1)
         elif type == DataType.UUID3:
@@ -102,40 +110,81 @@ def set_value(
 
 
 #
+# get_value_type
+#
+def get_value_type(
+        data: Any = None,
+        json_only: bool = False
+    ) -> DataType:
+    '''
+    Identify the type of the value
+
+    Args:
+        data (Any): The data to be typed
+        json_only (bool): Only allow supported JSON data types
+    
+    Returns:
+        DataType: The data type of the value
+
+    Raises:
+        TypeError:
+            When the data type is unsupported
+    '''
+    # Determine the type of the data
+    if isinstance(data, dict): return DataType.DICTIONARY
+    if isinstance(data, list): return DataType.LIST
+    if isinstance(data, str): return DataType.STRING
+    if isinstance(data, tuple): return DataType.TUPLE
+    if isinstance(data, int): return DataType.INTEGER
+    if isinstance(data, float): return DataType.FLOAT
+    if isinstance(data, bool): return DataType.BOOLEAN
+
+    if data is None: return DataType.NONE
+
+    if not json_only:
+        if isinstance(data, uuid.UUID): return DataType.UUID
+
+    # A datatype we can't handle
+    raise TypeError(
+        f"Data type not supported: {type(data)}"
+    )
+
+
+#
 # to_json
 #
 def to_json(
-    data: Any = None
+        data: Any = None,
 ) -> str:
     '''
     Convert data to JSON.
 
     Args:
         data (Any): The data to be converted
-    
+
     Returns:
         str: The data as a JSON string
 
     Raises:
-        None
+        TypeError:
+            When the data cannot be converted to JSON
     '''
     if not data: return ""
 
-    # Is the data already a string?
-    if isinstance(data, str): return data
+    # Wrap the data in a dict containting the value and type
+    _json_dict = {
+        "value": data,
+        "type": get_value_type(data).value
+    }
 
-    # If the data can't be converted, return an empty string
-    try:
-        return json.dumps(data)
-    except:
-        return ""
+    return json.dumps(_json_dict)
 
 
 #
 # from_json
 #
 def from_json(
-        data: str = ""
+        data: str = "",
 ) -> Any:
     '''
     Convert a JSON string to python data
@@ -147,19 +196,26 @@ def from_json(
         Any: The data converted from the JSON string
 
     Raises:
-        None
+        TypeError:
+            When the data is not a JSON string
+        json.decoder.JSONDecodeError:
+            When JSON conversion fails
     '''
-    if not data: return None
+    _json_dict = json.loads(data)
 
-    # This will fail if the data isn't in JSON format
-    try:
-        return json.loads(data)
-    except:
-        # Error converting - If data is a string just return it
-        if isinstance(data, str):
-            return data
-        else:
-            return None
+    # Extract the value based on the type of the data
+    _value = set_value(
+        data=_json_dict['value'],
+        type=DataType(_json_dict['type']),
+        default=DataType.NONE
+    )
+
+    if _value == DataType.NONE:
+        raise TypeError(
+            f"Data type not supported: {_json_dict['type']}"
+        )
+
+    return _value
 
 
 ###########################################################################

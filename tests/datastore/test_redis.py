@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-PyTest - Test of system datastore functions
+PyTest - Test of redis datastore functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -47,14 +47,16 @@ CHANGE_TASK_STR_VALUE = "New value for the task variable"
 #
 # Task to set a value
 #
-def shared_value_target(system_ds=None, item=None):
-    assert system_ds
+def shared_value_target(redis_ds=None, item=None):
+    assert redis_ds
 
+    # Connect to Redis
+    redis_ds.connect()
     # Make sure the value exists
-    assert system_ds.has(item)
+    assert redis_ds.has(item)
 
     # Change the value
-    system_ds.set(item, CHANGE_TASK_STR_VALUE, encrypt=True)
+    redis_ds.set(item, CHANGE_TASK_STR_VALUE, encrypt=True)
 
     # Return the original value + new value
     return TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
@@ -69,7 +71,7 @@ def shared_value_target(system_ds=None, item=None):
 #
 # Local
 #
-class Test_System_Datastore():
+class Test_Redis_Datastore():
     def _assert_not_set(self, ds, item, value, default):
         assert not ds.has(item)
         assert not ds.get(item)
@@ -93,7 +95,8 @@ class Test_System_Datastore():
 
     def test_basic(self, manager):
         ''' Test the basics has/get/set/delete '''
-        ds = manager.SystemDataStore(security="low")
+        ds = manager.RedisDataStore(security="low")
+        ds.connect()
 
         self._assert_not_set(
             ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
@@ -113,7 +116,8 @@ class Test_System_Datastore():
     def test_encryption_no_password(self, manager):
         ''' Test encryption - no password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.SystemDataStore(security="low")
+        ds = manager.RedisDataStore(security="low")
+        ds.connect()
 
         self._assert_not_set(
             ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
@@ -133,7 +137,8 @@ class Test_System_Datastore():
     def test_encryption_with_password(self, manager):
         ''' Test encryption - simple password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.SystemDataStore(password="a password", security="low")
+        ds = manager.RedisDataStore(password="a password", security="low")
+        ds.connect()
 
         self._assert_not_set(
             ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
@@ -153,10 +158,12 @@ class Test_System_Datastore():
     def test_encryption_with_password_salt(self, manager):
         ''' Test encryption - simple password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.SystemDataStore(
+        ds = manager.RedisDataStore(
             password="a password",
             salt=crypto_tools.fernet.generate_salt(),
             security="low")
+
+        ds.connect()
 
         self._assert_not_set(
             ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
@@ -175,7 +182,8 @@ class Test_System_Datastore():
 
     def test_expiry(self, manager):
         ''' Test an expiring value '''
-        ds = manager.SystemDataStore(security="low")
+        ds = manager.RedisDataStore(security="low")
+        ds.connect()
 
         self._assert_not_set(
             ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
@@ -194,9 +202,12 @@ class Test_System_Datastore():
 
     def test_share_thread(self, manager):
         ''' Test sharing a value to a thread '''
-        ds = manager.SystemDataStore(security="low")
+        ds = manager.RedisDataStore(security="low")
 
         # Create an item
+        # Connect and disconnect to prevent Redis connection being
+        # copied to child task
+        ds.connect()
         ds.set(TASK_STR, TASK_STR_VALUE, encrypt=True)
         self._assert_set_enc(
             ds, TASK_STR, TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
@@ -204,7 +215,7 @@ class Test_System_Datastore():
 
         # Add a task
         _kwargs = {
-            "system_ds": ds,
+            "redis_ds": ds,
             "item": TASK_STR,
         }
 
@@ -214,7 +225,7 @@ class Test_System_Datastore():
             kwargs = _kwargs
         )
 
-        # Start the task
+        # Start the task (and connect to Redis in this thread)
         _task.start()
 
         # What for the task to complete
@@ -230,6 +241,7 @@ class Test_System_Datastore():
         assert _results.return_value == TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
 
         # Check the value of the item
+        ds.connect()
         self._assert_set_enc(
             ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
         )
@@ -237,17 +249,21 @@ class Test_System_Datastore():
 
     def test_share_process(self, manager):
         ''' Test sharing a value to a process '''
-        ds = manager.SystemDataStore(security="low")
+        ds = manager.RedisDataStore(security="low")
 
         # Create an item
+        # Connect and disconnect to prevent Redis connection being
+        # copied to child task
+        ds.connect()
         ds.set(TASK_STR, TASK_STR_VALUE, encrypt=True)
         self._assert_set_enc(
             ds, TASK_STR, TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
         )
+        ds.disconnect()
 
         # Add a task
         _kwargs = {
-            "system_ds": ds,
+            "redis_ds": ds,
             "item": TASK_STR,
         }
 
@@ -257,7 +273,7 @@ class Test_System_Datastore():
             kwargs = _kwargs
         )
 
-        # Start the task
+        # Start the task (and connect to Redis in this process)
         _task.start()
 
         # What for the task to complete
@@ -273,6 +289,7 @@ class Test_System_Datastore():
         assert _results.return_value == TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
 
         # Check the value of the item
+        ds.connect()
         self._assert_set_enc(
             ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
         )

@@ -37,6 +37,7 @@ from appcore.multitasking.task import Task, TaskType
 from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
 from appcore.datastore.system import DataStoreSystem
+from appcore.datastore.redis import DataStoreRedis
 
 # Imports for python variable type hints
 from typing import Callable
@@ -522,6 +523,52 @@ class AppCoreManager(AppCoreModuleBase):
             log_file=self._log_file,
             log_to_console=self.log_to_console
         )
+
+
+    #
+    # RedisDataStore
+    #
+    def RedisDataStore(
+            self,
+            password: str = "",
+            salt: bytes = b"",
+            security: str = "high",
+            **kwargs: KeywordDictType
+    ) -> DataStoreRedis:
+        '''
+        Create a System Datastore (using the multiprocessing manager)
+
+        Args:
+            password: (str): Password used to derive the encryption key - A
+                random password will be used if none provided
+            salt: (bytes): Binary string containing the salt - A default
+                salt will be used in none provided
+            security (str): Determines the computation time of the key.  Must
+                be one of "low", "medium", or "high"
+            kwargs (dict): List of redis parameters to be pass to the redis
+                connection
+
+        Returns:
+            DataStoreRedis: An instance of a Redis Datastore
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating redis datastore")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return DataStoreRedis(
+            password=password,
+            salt=salt,
+            security=security,
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console,
+            **kwargs
+        )
+
 
 ###########################################################################
 #

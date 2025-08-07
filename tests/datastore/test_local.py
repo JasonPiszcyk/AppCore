@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-PyTest - Test of local datostore functions
+PyTest - Test of local datastore functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
