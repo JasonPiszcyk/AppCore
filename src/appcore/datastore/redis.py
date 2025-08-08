@@ -220,7 +220,7 @@ class DataStoreRedis(DataStoreBaseClass):
     #
     def has(
             self,
-            name: str = "",
+            name: str = ""
     ) -> bool:
         '''
         Check if the item exists in the datastore
@@ -356,7 +356,7 @@ class DataStoreRedis(DataStoreBaseClass):
     #
     def delete(
             self,
-            name: str = "",
+            name: str = ""
     ) -> None:
         '''
         Delete an item from the datastore

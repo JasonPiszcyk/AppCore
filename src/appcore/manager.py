@@ -38,6 +38,7 @@ from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
 from appcore.datastore.system import DataStoreSystem
 from appcore.datastore.redis import DataStoreRedis
+from appcore.datastore.inifile import DataStoreINIFile
 
 # Imports for python variable type hints
 from typing import Callable
@@ -567,6 +568,52 @@ class AppCoreManager(AppCoreModuleBase):
             log_file=self._log_file,
             log_to_console=self.log_to_console,
             **kwargs
+        )
+
+
+    #
+    # INIFileDataStore
+    #
+    def INIFileDataStore(
+            self,
+            filename: str = "",
+            password: str = "",
+            salt: bytes = b"",
+            security: str = "high"
+    ) -> DataStoreINIFile:
+        '''
+        Create an INIFile Datastore
+
+        Args:
+            filename (str): The path for the INI file
+            password: (str): Password used to derive the encryption key - A
+                random password will be used if none provided
+            salt: (bytes): Binary string containing the salt - A default
+                salt will be used in none provided
+            security (str): Determines the computation time of the key.  Must
+                be one of "low", "medium", or "high"
+
+        Returns:
+            DataStoreINIFile: An instance of a INI File Datastore
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating INI File datastore")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        return DataStoreINIFile(
+            filename=filename,
+            lock=_manager.Lock(),
+            data_expiry=_manager.list(),
+            password=password,
+            salt=salt,
+            security=security,
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
         )
 
 

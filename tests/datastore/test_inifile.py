@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-PyTest - Test of redis datastore functions
+PyTest - Test of INIFile datastore functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -29,6 +29,9 @@ import json
 #
 # Globals
 #
+INIFILE = "/tmp/test_config.ini"
+INIFILE_SECTION = "test_section"
+
 DEFAULT_SIMPLE_STR_VALUE = "default_string_value"
 SIMPLE_STR = "simple.variable"
 SIMPLE_STR_VALUE = "Value for simple variable"
@@ -47,16 +50,14 @@ CHANGE_TASK_STR_VALUE = "New value for the task variable"
 #
 # Task to set a value
 #
-def shared_value_target(redis_ds=None, item=None):
-    assert redis_ds
+def shared_value_target(inifile_ds=None, section="", item=None):
+    assert inifile_ds
 
-    # Connect to Redis
-    redis_ds.connect()
     # Make sure the value exists
-    assert redis_ds.has(item)
+    assert inifile_ds.has(section, item)
 
     # Change the value
-    redis_ds.set(item, CHANGE_TASK_STR_VALUE, encrypt=True)
+    inifile_ds.set(section, item, CHANGE_TASK_STR_VALUE, encrypt=True)
 
     # Return the original value + new value
     return TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
@@ -72,160 +73,183 @@ def shared_value_target(redis_ds=None, item=None):
 # Local
 #
 class Test_Redis_Datastore():
-    def _assert_not_set(self, ds, item, value, default):
-        assert not ds.has(item)
-        assert not ds.get(item)
-        assert ds.get(item, default=default) == default
+    def _assert_not_set(self, ds, section, item, value, default):
+        assert not ds.has(section, item)
+        assert not ds.get(section, item)
+        assert ds.get(section, item, default=default) == default
 
 
-    def _assert_set(self, ds, item, value, default):
-        assert ds.has(item)
-        assert ds.get(item) == value
-        assert ds.get(item, default=default) == value
+    def _assert_set(self, ds, section, item, value, default):
+        assert ds.has(section, item)
+        assert ds.get(section, item) == value
+        assert ds.get(section, item, default=default) == value
 
 
-    def _assert_set_enc(self, ds, item, value, default):
-        assert ds.has(item)
-        with pytest.raises(json.decoder.JSONDecodeError):
-            _ = ds.get(item)
-
-        assert ds.get(item, decrypt=True) == value
-        assert ds.get(item, default=default, decrypt=True) == value
+    def _assert_set_enc(self, ds, section, item, value, default):
+        assert ds.has(section, item)
+        assert ds.get(section, item, decrypt=False) != value
+        assert ds.get(section, item, decrypt=True) == value
+        assert ds.get(section, item, default=default, decrypt=True) == value
 
 
     def test_basic(self, manager):
         ''' Test the basics has/get/set/delete '''
-        ds = manager.RedisDataStore(security="low")
-        ds.connect()
+        ds = manager.INIFileDataStore(filename=INIFILE, security="low")
 
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE)
+        ds.set(INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE)
         self._assert_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.delete(SIMPLE_STR)
+        ds.delete(INIFILE_SECTION, SIMPLE_STR)
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
     def test_encryption_no_password(self, manager):
         ''' Test encryption - no password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.RedisDataStore(security="low")
-        ds.connect()
+        ds = manager.INIFileDataStore(filename=INIFILE, security="low")
 
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
+        ds.set(INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
         self._assert_set_enc(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.delete(SIMPLE_STR)
+        ds.delete(INIFILE_SECTION, SIMPLE_STR)
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
     def test_encryption_with_password(self, manager):
         ''' Test encryption - simple password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.RedisDataStore(password="a password", security="low")
-        ds.connect()
+        ds = manager.INIFileDataStore(filename=INIFILE, password="a password",
+                security="low")
 
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
+        ds.set(INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
         self._assert_set_enc(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.delete(SIMPLE_STR)
+        ds.delete(INIFILE_SECTION, SIMPLE_STR)
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
     def test_encryption_with_password_salt(self, manager):
         ''' Test encryption - simple password supplied '''
         # Use 'low' security as it is just quicker to compute the key
-        ds = manager.RedisDataStore(
+        ds = manager.INIFileDataStore(
+            filename=INIFILE,
             password="a password",
             salt=crypto_tools.fernet.generate_salt(),
             security="low")
 
-        ds.connect()
-
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
+        ds.set(INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE, encrypt=True)
         self._assert_set_enc(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
-        ds.delete(SIMPLE_STR)
+        ds.delete(INIFILE_SECTION, SIMPLE_STR)
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
     def test_expiry(self, manager):
         ''' Test an expiring value '''
-        ds = manager.RedisDataStore(security="low")
-        ds.connect()
+        ds = manager.INIFileDataStore(filename=INIFILE, security="low")
 
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
  
-        ds.set(SIMPLE_STR, SIMPLE_STR_VALUE, timeout=2)
+        ds.set(INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE, timeout=2)
         self._assert_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
 
         time.sleep(3)
         self._assert_not_set(
-            ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_SIMPLE_STR_VALUE
+            ds, INIFILE_SECTION, SIMPLE_STR, SIMPLE_STR_VALUE,
+            DEFAULT_SIMPLE_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
     def test_share_thread(self, manager):
         ''' Test sharing a value to a thread '''
-        ds = manager.RedisDataStore(security="low")
+        ds = manager.INIFileDataStore(filename=INIFILE, security="low")
 
         # Create an item
-        # Connect and disconnect to prevent Redis connection being
-        # copied to child task
-        ds.connect()
-        ds.set(TASK_STR, TASK_STR_VALUE, encrypt=True)
+        ds.set(INIFILE_SECTION, TASK_STR, TASK_STR_VALUE, encrypt=True)
         self._assert_set_enc(
-            ds, TASK_STR, TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+            ds, INIFILE_SECTION, TASK_STR, TASK_STR_VALUE,
+            DEFAULT_TASK_STR_VALUE
         )
 
         # Add a task
         _kwargs = {
-            "redis_ds": ds,
+            "inifile_ds": ds,
+            "section": INIFILE_SECTION,
             "item": TASK_STR,
         }
 
         _task = manager.Thread(
-            name = f"Redis Datastore - Test Share Thread",
+            name = f"INIFile Datastore - Test Share Thread",
             target = shared_value_target,
             kwargs = _kwargs
         )
 
-        # Start the task (and connect to Redis in this thread)
+        # Start the task
         _task.start()
 
         # What for the task to complete
@@ -241,39 +265,40 @@ class Test_Redis_Datastore():
         assert _results.return_value == TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
 
         # Check the value of the item
-        ds.connect()
         self._assert_set_enc(
-            ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+            ds, INIFILE_SECTION, TASK_STR, CHANGE_TASK_STR_VALUE,
+            DEFAULT_TASK_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
     def test_share_process(self, manager):
         ''' Test sharing a value to a process '''
-        ds = manager.RedisDataStore(security="low")
+        ds = manager.INIFileDataStore(filename=INIFILE, security="low")
 
         # Create an item
-        # Connect and disconnect to prevent Redis connection being
-        # copied to child task
-        ds.connect()
-        ds.set(TASK_STR, TASK_STR_VALUE, encrypt=True)
+        ds.set(INIFILE_SECTION, TASK_STR, TASK_STR_VALUE, encrypt=True)
         self._assert_set_enc(
-            ds, TASK_STR, TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+            ds, INIFILE_SECTION, TASK_STR, TASK_STR_VALUE,
+            DEFAULT_TASK_STR_VALUE
         )
-        ds.disconnect()
 
         # Add a task
         _kwargs = {
-            "redis_ds": ds,
+            "inifile_ds": ds,
+            "section": INIFILE_SECTION,
             "item": TASK_STR,
         }
 
         _task = manager.Process(
-            name = f"Redis Datastore - Test Share Process",
+            name = f"INIFile Datastore - Test Share Process",
             target = shared_value_target,
             kwargs = _kwargs
         )
 
-        # Start the task (and connect to Redis in this process)
+        # Start the task
         _task.start()
 
         # What for the task to complete
@@ -289,10 +314,13 @@ class Test_Redis_Datastore():
         assert _results.return_value == TASK_STR_VALUE + CHANGE_TASK_STR_VALUE
 
         # Check the value of the item
-        ds.connect()
         self._assert_set_enc(
-            ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
+            ds, INIFILE_SECTION, TASK_STR, CHANGE_TASK_STR_VALUE,
+            DEFAULT_TASK_STR_VALUE
         )
+
+        # Delete the INI File
+        ds.delete_file()
 
 
 ###########################################################################

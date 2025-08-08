@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
-Datastore - Local
+Datastore - INI File
 
-Datastore stores information locally in a shared dictionary.
+Datastore stores information in an INI File.
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -29,6 +29,8 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import os
+import configparser
 
 # Local app modules
 from appcore.datastore.datastore_base import DataStoreBaseClass
@@ -37,6 +39,7 @@ from appcore.conversion import to_json, from_json, set_value, DataType
 # Imports for python variable type hints
 from typing import Any
 from threading import Lock as LockType
+from multiprocessing.managers import ListProxy
 
 
 ###########################################################################
@@ -61,15 +64,15 @@ from threading import Lock as LockType
 
 ###########################################################################
 #
-# DataStoreLocal Class Definition
+# DataStoreINIFile Class Definition
 #
 ###########################################################################
-class DataStoreLocal(DataStoreBaseClass):
+class DataStoreINIFile(DataStoreBaseClass):
     '''
-    Class to describe the local datastore.
+    Class to describe the INI file datastore.
 
-    The data is stored in a dictionary that is made available globally
-    throughout the application
+    The data is stored in an INI file.  This implementation is not efficient
+    for many reads/writes as the file is read/written on each operation
 
     Attributes:
         None
@@ -81,7 +84,9 @@ class DataStoreLocal(DataStoreBaseClass):
     def __init__(
             self,
             *args,
+            filename: str = "",
             lock: LockType | None = None,
+            data_expiry: ListProxy[Any] | None = None,
             **kwargs
     ):
         '''
@@ -90,7 +95,9 @@ class DataStoreLocal(DataStoreBaseClass):
         Args:
             *args (Undef): Unnamed arguments to be passed to the constructor
                 of the inherited process
-            lock (Lock): A SyncManager lock use to protect the dict
+            filename (str): The path for the INI file
+            lock (Lock): A SyncManager lock use to make actions atomic
+            data_expiry (list): SyncManger List to store the expiry info
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -99,16 +106,19 @@ class DataStoreLocal(DataStoreBaseClass):
 
         Raises:
             AssertionError:
-                When a SyncManager lock is not supplied
+                When a filename is not supplied
+                When a SyncManager list is not provided to handle expiry
         '''
-        assert lock, f"A lock is required to implement the local datastore"
+        assert filename, f"A file name is required for the INI file"
+        assert lock, f"A lock is required to implement the INIFile datastore"
+        assert isinstance(data_expiry, ListProxy), \
+            f"A SyncManager list is required to implement the INIFile datastore"
 
         super().__init__(*args, **kwargs)
 
         # Private Attributes
-        self.__data: dict = {}
-        self.__data_expiry: list = []
-
+        self.__filename: str = filename
+        self.__data_expiry: ListProxy[Any] = data_expiry
         self.__lock: LockType = lock
 
         # Attributes
@@ -119,6 +129,13 @@ class DataStoreLocal(DataStoreBaseClass):
     # Properties
     #
     ###########################################################################
+    #
+    # filename
+    #
+    @property
+    def filename(self) -> str:
+        ''' The path to the INI File '''
+        return self.__filename
 
 
     ###########################################################################
@@ -126,6 +143,55 @@ class DataStoreLocal(DataStoreBaseClass):
     # Maintenance Functions
     #
     ###########################################################################
+    #
+    # __read_ini
+    #
+    def __read_ini(self) -> configparser.ConfigParser:
+        '''
+        Read in the INI file
+
+        Args:
+            None
+
+        Returns:
+            configparser.ConfigParser: An instance of the config
+
+        Raises:
+            None
+        '''
+        _config = configparser.ConfigParser()
+        _config.read(self.filename)
+        return _config
+
+
+    #
+    # __write_ini
+    #
+    def __write_ini(
+            self,
+            config: configparser.ConfigParser | None = None
+    ):
+        '''
+        Write in the INI file
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError:
+                When a ConfigParser instance is not provided
+        '''
+        assert config, "A config must be supplied to write to INI file"
+        assert isinstance(config, configparser.ConfigParser), \
+            f"Config must be an instance of configparser.ConfigParser"
+
+        with open(self.__filename, 'w') as configfile:
+            config.write(configfile)
+
+
     #
     # __item_maintenance
     #
@@ -146,20 +212,39 @@ class DataStoreLocal(DataStoreBaseClass):
         _now = self.timestamp()
         _sorted_expiry_list = sorted(self.__data_expiry)
 
+        # Begin the lock here - as we need to read/write the file
+        self.__lock.acquire()
+
+        _config = self.__read_ini()
+
         # Use a copy of the expiry list so we can change it during processing
+        _changes = False
         for _entry in _sorted_expiry_list:
             # Extract the timestamp from the key
-            _timestamp_str, _, _name = _entry.partition("__")
+            _timestamp_str, _, _item = _entry.partition("__")
+            _section, _, _name = _item.partition("__")
             _timestamp = set_value(_timestamp_str, DataType.INT, default=0)            
 
             # Stop processing if the timestamp is in the future
             if _now < _timestamp: break
 
-            # Remove the entry (and the expiry record)
-            self.__lock.acquire()
-            if _name in self.__data: del self.__data[_name]
+            # Remove the entry
+            if _config.has_option(_section, _name):
+                _changes = True
+                _config.remove_option(_section, _name)
+
+            # If the section is empty, remove it
+            if len(_config.options(_section)) == 0:
+                _changes = True
+                _config.remove_section(_section)
+
+            # Remove the expiry entry
             self.__data_expiry.remove(_entry)
-            self.__lock.release()
+
+        if _changes: self.__write_ini(_config)
+
+        # Release the lock
+        self.__lock.release()
 
 
     ###########################################################################
@@ -168,16 +253,43 @@ class DataStoreLocal(DataStoreBaseClass):
     #
     ###########################################################################
     #
+    # has_section
+    #
+    def has_section(
+            self,
+            section: str = ""
+    ) -> bool:
+        '''
+        Check if the sectiom exists in the datastore
+
+        Args:
+            section (str): The section in which the item appears
+
+        Returns:
+            bool: True if the item exists, False otherwise
+
+        Raises:
+            None
+        '''
+        self.__item_maintenance()
+
+        _config = self.__read_ini()
+        return _config.has_section(section)
+
+
+    #
     # has
     #
     def has(
             self,
+            section: str = "",
             name: str = ""
     ) -> bool:
         '''
         Check if the item exists in the datastore
 
         Args:
+            section (str): The section in which the item appears
             name (str): The name of the item to check
 
         Returns:
@@ -187,7 +299,9 @@ class DataStoreLocal(DataStoreBaseClass):
             None
         '''
         self.__item_maintenance()
-        return name in self.__data
+
+        _config = self.__read_ini()
+        return _config.has_option(section, name)
 
 
     #
@@ -195,6 +309,7 @@ class DataStoreLocal(DataStoreBaseClass):
     #
     def get(
             self,
+            section: str = "",
             name: str = "",
             default: Any = None,
             decrypt: bool = False
@@ -203,6 +318,7 @@ class DataStoreLocal(DataStoreBaseClass):
         Get a value
 
         Args:
+            section (str): The section in which the item appears
             name (str): The name of the item to get
             default (Any): Value to return if the item cannot be found
             decrypt (bool): If True, attempt to decrypt the value
@@ -214,9 +330,9 @@ class DataStoreLocal(DataStoreBaseClass):
             None
         '''
         self.__item_maintenance()
-        if not self.has(name): return default
 
-        _value = self.__data[name]
+        _config = self.__read_ini()
+        _value = _config.get(section, name, fallback=default)
 
         if decrypt:
             # Decrypt, convert from JSON
@@ -231,6 +347,7 @@ class DataStoreLocal(DataStoreBaseClass):
     #
     def set(
             self,
+            section: str = "",
             name: str = "",
             value: Any = None,
             encrypt: bool = False,
@@ -240,6 +357,7 @@ class DataStoreLocal(DataStoreBaseClass):
         Set a value for an item
 
         Args:
+            section (str): The section in which the item appears
             name (str): The name of the item to set
             value (Any): Value to set the item to
             encrypt (bool): If True, attempt to encrypt the value
@@ -266,14 +384,19 @@ class DataStoreLocal(DataStoreBaseClass):
 
         # Set the value
         self.__lock.acquire()
-        self.__data[name] = value
+        _config = self.__read_ini()
+        if not section in _config:
+            _config[section] = {}
+
+        _config[section][name] = value
+        self.__write_ini(_config)
 
         # Set the expiry info for the item if required
         if timeout > 0:
             _timestamp = self.timestamp(offset=timeout)
 
             # Append the item name to prevent duplicate keys/timestamps
-            self.__data_expiry.append(f"{_timestamp}__{name}")
+            self.__data_expiry.append(f"{_timestamp}__{section}__{name}")
 
         self.__lock.release()
 
@@ -283,12 +406,14 @@ class DataStoreLocal(DataStoreBaseClass):
     #
     def delete(
             self,
+            section: str = "",
             name: str = ""
     ) -> None:
         '''
         Delete an item from the datastore
 
         Args:
+            section (str): The section in which the item appears
             name (str): The name of the item to delete
 
         Returns:
@@ -299,10 +424,51 @@ class DataStoreLocal(DataStoreBaseClass):
         '''
         self.__item_maintenance()
 
-        if self.has(name):
-            self.__lock.acquire()
-            del self.__data[name]
-            self.__lock.release()
+        self.__lock.acquire()
+
+        _config = self.__read_ini()
+        _changes = False
+
+        # Remove the entry
+        if _config.has_option(section, name):
+            _changes = True
+            _config.remove_option(section, name)
+
+        # If the section is empty, remove it
+        if len(_config.options(section)) == 0:
+            _changes = True
+            _config.remove_section(section)
+
+        # Write the config file if necessary
+        if _changes: self.__write_ini(_config)
+
+        self.__lock.release()
+
+
+    #
+    # delete_file
+    #
+    def delete_file(self ) -> None:
+        '''
+        Delete the INI File
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        # Remove any Expiry Data
+        _sorted_expiry_list = sorted(self.__data_expiry)
+        for _entry in _sorted_expiry_list:
+            self.__data_expiry.remove(_entry)
+
+        # Check if the INI File exists and delete it
+        if os.path.exists(self.__filename):
+            os.remove(self.__filename)
 
 
 ###########################################################################
