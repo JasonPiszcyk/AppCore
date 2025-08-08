@@ -32,8 +32,8 @@ import logging
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
-from appcore.validation import is_valid_log_level_string
 from appcore.multitasking.task import Task, TaskType
+from appcore.multitasking.watchdog import Watchdog as WatchdogClass
 from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
 from appcore.datastore.system import DataStoreSystem
@@ -204,12 +204,15 @@ class AppCoreManager(AppCoreModuleBase):
 
         # Ensure the multiprocessing manager has been created
         # Also ensures the instance attributes __context and __manager are set
-        _ = self._get_manager()
+        _manager = self._get_manager()
 
         return Task(
             name=name,
             context=self.__context,
-            manager=self.__manager,
+            info_dict=_manager.dict(),
+            results_dict=_manager.dict(),
+            start_event=_manager.Event(),
+            stop_event=_manager.Event(),
             target=target,
             target_kwargs=kwargs,
             stop_function=stop_function,
@@ -253,12 +256,15 @@ class AppCoreManager(AppCoreModuleBase):
 
         # Ensure the multiprocessing manager has been created
         # Also ensures the instance attributes __context and __manager are set
-        _ = self._get_manager()
+        _manager = self._get_manager()
 
         return Task(
             name=name,
             context=self.__context,
-            manager=self.__manager,
+            info_dict=_manager.dict(),
+            results_dict=_manager.dict(),
+            start_event=_manager.Event(),
+            stop_event=_manager.Event(),
             target=target,
             target_kwargs=kwargs,
             stop_function=stop_function,
@@ -268,6 +274,58 @@ class AppCoreManager(AppCoreModuleBase):
             log_file=self._log_file,
             log_to_console=self.log_to_console
         )
+
+
+    #
+    # Watchdog
+    #
+    def Watchdog(
+            self,
+            interval: float = 30.0
+    ) -> WatchdogClass:
+        '''
+        Create a watchdog to monitor tasks
+
+        Args:
+            interval (float): How often the watchdog (in seconds) wakes up
+                and checks the tasks
+
+        Returns:
+            Watchdog: An instance of the Watchdog
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating watchdog")
+
+        # Ensure the multiprocessing manager has been created
+        # Also ensures the instance attributes __context and __manager are set
+        _manager = self._get_manager()
+
+        _watchdog = WatchdogClass(
+            task_start_dict=_manager.dict(),
+            task_stop_dict=_manager.dict(),
+            task_restart_dict=_manager.dict(),
+            stop_event=_manager.Event(),
+            interval_event=_manager.Event(),
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
+
+        _kwargs = {
+            "interval": interval
+        }
+
+        _watchdog_task = self.Thread(
+            name = f"Watchdog",
+            target = _watchdog.loop,
+            kwargs = _kwargs,
+        )
+
+        _watchdog_task.start()
+
+        return _watchdog
 
 
     #

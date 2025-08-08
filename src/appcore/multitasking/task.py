@@ -29,12 +29,13 @@ along with this program (See file: COPYING). If not, see
 # System Modules
 import uuid
 from multiprocessing import Process, get_context, get_start_method
-from multiprocessing import current_process
+from multiprocessing import current_process, active_children
 from threading import Thread
+from threading import enumerate as enumerate_threads
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
-from appcore.typing import TaskStatus
+from appcore.typing import TaskStatus, TaskAction
 from appcore.multitasking.task_results import TaskResults
 from appcore.multitasking.task_wrapper import task_wrapper
 from appcore.multitasking import exception
@@ -42,8 +43,8 @@ from appcore.multitasking import exception
 # Imports for python variable type hints
 from typing import Any, Callable, Literal, get_args
 from multiprocessing.context import SpawnContext, DefaultContext
-from multiprocessing.context import SpawnProcess as SpawnProcessType
-from multiprocessing.managers import SyncManager as SyncManagerType
+from multiprocessing.process import BaseProcess
+from multiprocessing.managers import DictProxy
 from threading import Event as EventType
 from appcore.typing import KeywordDictType
 
@@ -65,7 +66,7 @@ TaskTypeType = Literal["thread", "process"]
 #
 TASK_START_TIMEOUT: float = 5.0
 TASK_STOP_TIMEOUT: float = 15.0
-TASK_JOIN_TIMEOUT: float = 1.0
+TASK_JOIN_TIMEOUT: float = 5.0
 
 #
 # Global Variables
@@ -91,8 +92,12 @@ class Task(AppCoreModuleBase):
         stop_function (Callable): Function to run to stop the
             thread/process
         stop_kwargs (dict): Arguments to pass the stop function
+        is_alive (bool): Indicates if the task is alive
+        id (int): Id of the thread/process
         status (str): The status of the task
         results (TaskResults): The results of the class
+        task_action (str): String indicating the action Watchdog should take
+            with the task
     '''
     #
     # __init__
@@ -100,8 +105,11 @@ class Task(AppCoreModuleBase):
     def __init__(
             self,
             *args,
-            context: ContextType | None = None, 
-            manager: SyncManagerType | None = None,
+            context: ContextType | None = None,
+            info_dict: DictProxy[Any, Any] | None = None,
+            results_dict: DictProxy[Any, Any] | None = None,
+            start_event: EventType | None = None,
+            stop_event: EventType | None = None,
             name: str = "",
             target: Callable | None = None,
             target_kwargs: KeywordDictType = {},
@@ -116,10 +124,12 @@ class Task(AppCoreModuleBase):
         Args:
             *args (Undef): Unnamed arguments to be passed to the constructor
                 of the inherited process
-            name (str): An identifier for the task
             context (ContextType): The context to run multiprocessing in
-            manager (SyncManager): An instance of the SyncManager class to
-                provision resources for synching tasks
+            info_dict (dict): SyncManger dict to store info on the task
+            results_dict (dict): SyncManger dict to store the tasks results
+            start_event (Event): A SyncManager event to signal start complete
+            stop_event (Event): A SyncManager event to signal stop complete
+            name (str): An identifier for the task
             target (Callable): Function to run in the new thread/process
             target_kwargs (dict): Arguments to pass to the target function
             stop_function (Callable): Function to run to stop the
@@ -135,32 +145,35 @@ class Task(AppCoreModuleBase):
         Raises:
             None
         '''
+        assert isinstance(info_dict, DictProxy), \
+            f"A SyncManager dict is required for task info"
+        assert isinstance(results_dict, DictProxy), \
+            f"A SyncManager dict is required for task results"
+        assert start_event, "An event is required to manage task start"
+        assert stop_event, "An event is required to manage task end"
+
         super().__init__(*args, **kwargs)
 
-        # If the context is not set, use the default
         task_type_options = get_args(TaskTypeType)
         assert task_type in task_type_options, \
                 f"'{task_type}' is not in {task_type_options}"
 
         # Private Attributes
-        self.__context: ContextType = context if context else get_context()
-        if manager:
-            self.__manager: SyncManagerType = manager
-        else:
-            self.__manager: SyncManagerType = self.__context.Manager()
+        self.__context: ContextType = context or get_context()
 
         self.__task_type = task_type
-        self.__thread: Thread | None = None
-        self.__process: Process | SpawnProcessType | None = None
+        self.__thread_id: int | None = None
+        self.__process_id: int | None = None
+        self.__task_id: str = str(uuid.uuid4())
 
         # Events to sync when the task is started/stopped
-        self.__start_event: EventType | None = None
-        self.__stop_event: EventType | None = None
+        self.__start_event = start_event
+        self.__stop_event = stop_event
 
         # Create the shared information dictionary
-        self.__info = self.__manager.dict()
+        self.__info = info_dict
         self.__info["status"] = TaskStatus.NOT_STARTED.value
-        self.__info["results"] = self.__manager.dict()
+        self.__info["results"] = results_dict
         self.__info["results"]["return_value"] = None
         self.__info["results"]["exception_name"] = ""
         self.__info["results"]["exception_desc"] = ""
@@ -175,9 +188,9 @@ class Task(AppCoreModuleBase):
             self.target_kwargs: KeywordDictType = {}
 
         self.stop_function: Callable | None = stop_function
-        self.stop_kwargs: KeywordDictType = stop_kwargs if stop_kwargs else {}
+        self.stop_kwargs: KeywordDictType = stop_kwargs or {}
 
-        self._info = self.__manager.dict()
+        self.task_action = TaskAction.IGNORE.value
 
 
     ###########################################################################
@@ -185,6 +198,40 @@ class Task(AppCoreModuleBase):
     # Properties
     #
     ###########################################################################
+    #
+    # is_alive
+    #
+    @property
+    def is_alive(self) -> bool:
+        ''' Check if the process/thread is alive '''
+        if self.__task_type == "thread":
+            _thread = self.get_thread()
+            return _thread.is_alive() if _thread else False
+
+        elif self.__task_type == "process":
+            _process = self.get_process()
+            return _process.is_alive() if _process else False
+
+        else:
+            return False
+
+
+    #
+    # id
+    #
+    @property
+    def id(self) -> int | None:
+        ''' Return the thread/process ID '''
+        if self.__task_type == "thread":
+            return self.__thread_id
+
+        elif self.__task_type == "process":
+            return self.__process_id
+
+        else:
+            return None
+
+
     #
     # status
     #
@@ -217,6 +264,55 @@ class Task(AppCoreModuleBase):
 
     ###########################################################################
     #
+    # Thread/Process functions
+    #
+    ###########################################################################
+    #
+    # get_thread
+    #
+    def get_thread(self) -> Thread | None:
+        '''
+        Find the thread associated with this task
+
+        Args:
+            None
+
+        Returns:
+            Thread: A thread instance if found or None
+
+        Raises:
+        '''
+        for _thread in enumerate_threads():
+            if _thread.name == self.__task_id:
+                return _thread
+
+        return None
+
+
+    #
+    # get_process
+    #
+    def get_process(self) -> BaseProcess | None:
+        '''
+        Find the process associated with this task
+
+        Args:
+            None
+
+        Returns:
+            Process: A process instance if found or None
+
+        Raises:
+        '''
+        for _process in active_children():
+            if _process.name == self.__task_id:
+                return _process
+
+        return None
+
+
+    ###########################################################################
+    #
     # Task Operations
     #
     ###########################################################################
@@ -240,16 +336,12 @@ class Task(AppCoreModuleBase):
         self.logger.debug(
             f"Multiprocessing Start Method: {str(get_start_method())}"
         )
-
-        # Create an event to sync when the task is started
-        if not self.__start_event:
-            self.__start_event = self.__manager.Event()
-
-        # Create an event to sync when the task is stopped
-        if not self.__stop_event:
-            self.__stop_event = self.__manager.Event()
+        self.logger.debug(
+            f"Start: Start task: {self.name} (Type={self.__task_type})"
+        )
 
         if callable(self.target):
+            self.__start_event.clear()
             self.__info["status"] = TaskStatus.RUNNING.value
 
             self.logger.debug(f"Start: Task Type = {self.__task_type}")
@@ -269,24 +361,30 @@ class Task(AppCoreModuleBase):
 
             if self.__task_type == "thread":
                 # Start the thread
-                self.__thread = Thread(
+                _thread = Thread(
                     target=task_wrapper,
                     kwargs=_kwargs,
-                    name=self.name
+                    name=self.__task_id
                 )
-                self.__thread.start()
+                _thread.start()
+                self.__thread_id = _thread.native_id
 
             elif self.__task_type == "process":
-                self.__process = self.__context.Process(
+                _process = self.__context.Process(
                     target=task_wrapper,
                     kwargs=_kwargs,
-                    name=self.name
+                    name=self.__task_id
                 )
-                self.__process.start()
+                _process.start()
+                self.__process_id = _process.pid
 
 
             # When the process/thread is started, wait for the event
             self.__start_event.wait(timeout=TASK_START_TIMEOUT)
+
+        self.logger.debug(
+            f"Start: Task Started: {self.name} (Type={self.__task_type})"
+        )
 
 
     #
@@ -308,38 +406,42 @@ class Task(AppCoreModuleBase):
             TaskIsRunningError:
                 When the task cannot be shutdown correctly
         '''
+        self.logger.debug(
+            f"Cleanup: Cleanup task: {self.name} (Type={self.__task_type})"
+        )
+
         if self.__task_type == "thread":
-            if not  self.__thread:
-                raise exception.TaskIsNotRunningError(
-                    f"Cannot stop thread as no info found (Task: {self.name})"
-                )
+            _thread = self.get_thread()
+            if _thread:
+                # Wait for the thread to finish
+                _thread.join(TASK_JOIN_TIMEOUT)
 
-            # Wait for the thread to finish
-            self.__thread.join(TASK_JOIN_TIMEOUT)
+                if _thread.is_alive():
+                    raise exception.TaskIsRunningError(
+                        f"Thread failed to stop (Task: {self.name})"
+                    )
 
-            if self.__thread.is_alive():
-                raise exception.TaskIsRunningError(
-                    f"Thread failed to stop (Task: {self.name})"
-                )
-
-            self.__thread = None
+            self.__thread_id = None
 
         elif self.__task_type == "process":
-            if not  self.__process:
-                raise exception.TaskIsNotRunningError(
-                    f"Cannot stop process as no info found (Task: {self.name})"
-                )
+            _process = self.get_process()
+            if _process:
+                # Wait for the process to finish
+                _process.join(TASK_JOIN_TIMEOUT)
 
-            # Wait for the process to finish
-            self.__process.join(TASK_JOIN_TIMEOUT)
+                if _process.is_alive():
+                    raise exception.TaskIsRunningError(
+                        f"Process failed to stop (Task: {self.name})"
+                    )
 
-            if self.__process.is_alive():
-                raise exception.TaskIsRunningError(
-                    f"Process failed to stop (Task: {self.name})"
-                )
+                _process.close()
 
-            self.__process.close()
-            self.__process = None
+            self.__process_id = None
+
+        self.logger.debug(
+            f"Cleanup: Cleanup complete: {self.name} (Type={self.__task_type})"
+        )
+
 
 
     #
@@ -364,19 +466,26 @@ class Task(AppCoreModuleBase):
         #
         # Run the stop function
         #
+        self.logger.debug(
+            f"Stop: Stopping task: {self.name} (Type={self.__task_type})"
+        )
+
         if self.__task_type == "thread":
-            if not  self.__thread:
+            _thread = self.get_thread()
+            if not _thread:
                 raise exception.TaskIsNotRunningError(
                     f"Cannot stop thread as no info found (Task: {self.name})"
                 )
 
-            if not self.__thread.is_alive():
+            if not _thread.is_alive():
                 raise exception.TaskIsNotRunningError(
                     f"Cannot stop thread as not alive (Task: {self.name})"
                 )
 
             # Run the callable to stop the thread
             if callable(self.stop_function):
+                if self.__stop_event: self.__stop_event.clear()
+
                 self.stop_function(**self.stop_kwargs)
 
                 if self.__stop_event:
@@ -389,18 +498,21 @@ class Task(AppCoreModuleBase):
 
 
         elif self.__task_type == "process":
-            if not  self.__process:
+            _process = self.get_process()
+            if not _process:
                 raise exception.TaskIsNotRunningError(
                     f"Cannot stop process as no info found (Task: {self.name})"
                 )
 
-            if not self.__process.is_alive():
+            if not _process.is_alive():
                 raise exception.TaskIsNotRunningError(
                     f"Cannot stop process as not alive (Task: {self.name})"
                 )
 
             # Run the callable to stop the process
             if callable(self.stop_function):
+                if self.__stop_event: self.__stop_event.clear()
+
                 self.stop_function(**self.stop_kwargs)
 
                 if self.__stop_event:
@@ -416,6 +528,9 @@ class Task(AppCoreModuleBase):
         # Run the cleanup
         #
         self.cleanup()
+        self.logger.debug(
+            f"Stop: Stop complete: {self.name} (Type={self.__task_type})"
+        )
 
 
 ###########################################################################

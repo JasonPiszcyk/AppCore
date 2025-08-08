@@ -16,7 +16,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "schedule",
   "requests",
   "urllib3",
   "pytest",

@@ -465,11 +465,12 @@ class TaskQueue(AppCoreModuleBase):
         '''
         self.logger.debug(f"Stopping Listener")
         if remote or self.__listener_running:
+            if self.__stop_event: self.__stop_event.clear()
+
             # Put an EXIT message on the queue
             self._put_type(message_type=MessageType.EXIT)
 
             # If the stop_event exists, wait for it
-            if self.__stop_event: self.__stop_event.set()
             if self.__stop_event:
                 self.__stop_event.wait(timeout=STOP_WAIT_TIMEOUT)
 

@@ -84,6 +84,16 @@ class TaskStatus(enum.Enum):
 
 
 #
+# TaskAction
+#
+class TaskAction(enum.Enum):
+    START           = "Start"
+    STOP            = "Stop"
+    RESTART         = "Restart"
+    IGNORE          = "Ignore"
+
+
+#
 # LoggingLevel
 #
 class LoggingLevel(enum.Enum):
