@@ -333,6 +333,14 @@ class DataStoreRedis(DataStoreBaseClass):
 
         self.__item_maintenance()
 
+        # Check on dot names
+        if self._dot_names:
+            _keys = list(self.__redis.scan_iter())
+            if not self._check_dot_name(keys=_keys, name=name):
+                raise exception.DataStoreDotNameError(
+                    "Value cannot be stored in a intermediate dot level name"
+                )
+
         # Always store values in JSON format
         _json_value = to_json(value)
 
@@ -380,6 +388,33 @@ class DataStoreRedis(DataStoreBaseClass):
 
         # 'delete' should raise an exception if there is a problem
         self.__redis.delete(name)
+
+
+    ###########################################################################
+    #
+    # Export Functions
+    #
+    ###########################################################################
+    #
+    # export_to_json
+    #
+    def export_to_json(self) -> str:
+        '''
+        Export the data store to JSON
+
+        Args:
+            None
+
+        Returns:
+            str: The JSON string
+
+        Raises:
+            None
+        '''
+        # Convert to JSON
+        raise NotImplementedError(
+            "Export to JSON not support for Redis Datastore"
+        )
 
 
 ###########################################################################

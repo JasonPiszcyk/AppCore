@@ -32,7 +32,9 @@ along with this program (See file: COPYING). If not, see
 
 # Local app modules
 from appcore.datastore.datastore_base import DataStoreBaseClass
+import appcore.datastore.exception as exception
 from appcore.conversion import to_json, from_json, set_value, DataType
+
 
 # Imports for python variable type hints
 from typing import Any
@@ -258,6 +260,14 @@ class DataStoreLocal(DataStoreBaseClass):
 
         self.__item_maintenance()
 
+        # Check on dot names
+        if self._dot_names:
+            _keys = list(self.__data.keys())
+            if not self._check_dot_name(keys=_keys, name=name):
+                raise exception.DataStoreDotNameError(
+                    "Value cannot be stored in a intermediate dot level name"
+                )
+
         # Encrypt the value if required
         if encrypt:
             # Convert to JSON, Encrypt
@@ -303,6 +313,31 @@ class DataStoreLocal(DataStoreBaseClass):
             self.__lock.acquire()
             del self.__data[name]
             self.__lock.release()
+
+
+    ###########################################################################
+    #
+    # Export Functions
+    #
+    ###########################################################################
+    #
+    # export_to_json
+    #
+    def export_to_json(self) -> str:
+        '''
+        Export the data store to JSON
+
+        Args:
+            None
+
+        Returns:
+            str: The JSON string
+
+        Raises:
+            None
+        '''
+        # Convert to JSON
+        return self._export_to_json(data=self.__data, skip_invalid=True)
 
 
 ###########################################################################

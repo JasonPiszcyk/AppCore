@@ -238,15 +238,15 @@ class Watchdog(AppCoreModuleBase):
                             "restarted"
                         )
 
-                # Pause for the interval - Can be woken up if needed
-                if self.__interval_event.wait(timeout=interval):
-                    # Got woken up - Reset the event
-                    self.__interval_event.clear()
-
             except:
                 _exception_stack = traceback.format_exc()
                 self.logger.debug(_exception_stack)
-                break
+
+            # Pause for the interval - Can be woken up if needed
+            if self.__interval_event.wait(timeout=interval):
+                # Got woken up - Reset the event
+                self.__interval_event.clear()
+
 
         # Reset the events
         self.__stop_event.clear()

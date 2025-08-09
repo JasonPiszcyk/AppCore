@@ -155,12 +155,15 @@ def get_value_type(
 #
 def to_json(
         data: Any = None,
+        skip_invalid: bool = False,
 ) -> str:
     '''
     Convert data to JSON.
 
     Args:
         data (Any): The data to be converted
+        skip_invalid (bool): Skip objects that cannot be serialised rather than
+            raising TypeError
 
     Returns:
         str: The data as a JSON string
@@ -169,15 +172,22 @@ def to_json(
         TypeError:
             When the data cannot be converted to JSON
     '''
+    assert isinstance(skip_invalid, bool), "skip_invalid must be True or False"
     if not data: return ""
 
-    # Wrap the data in a dict containting the value and type
+    # Wrap the data in a dict containing the value and type
     _json_dict = {
         "value": data,
         "type": get_value_type(data).value
     }
 
-    return json.dumps(_json_dict)
+    # Define a function to handle invalid types
+    def _null_invalid_types(data):
+        return None
+
+    default_func = _null_invalid_types if skip_invalid else None
+
+    return json.dumps(_json_dict, default=default_func)
 
 
 #

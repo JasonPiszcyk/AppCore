@@ -63,6 +63,11 @@ class DataStoreRedisNotConnected(Exception):
     pass
 
 
+class DataStoreDotNameError(Exception):
+    ''' An error occurred when using dot names '''
+    pass
+
+
 ###########################################################################
 #
 # In case this is run directly rather than imported...

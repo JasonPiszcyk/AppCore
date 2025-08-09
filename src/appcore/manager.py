@@ -39,6 +39,7 @@ from appcore.datastore.local import DataStoreLocal
 from appcore.datastore.system import DataStoreSystem
 from appcore.datastore.redis import DataStoreRedis
 from appcore.datastore.inifile import DataStoreINIFile
+from appcore.server.telemetry import TelemetryServer as TelemetryServerClass
 
 # Imports for python variable type hints
 from typing import Callable
@@ -114,6 +115,9 @@ class AppCoreManager(AppCoreModuleBase):
         self.__context: SpawnContextType | None = None
         self.__manager: SyncManagerType | None = None
 
+        # Don't create a watchdog until needed
+        self.__watchdog: WatchdogClass | None = None
+
         # Attributes
 
 
@@ -142,7 +146,7 @@ class AppCoreManager(AppCoreModuleBase):
 
     ###########################################################################
     #
-    # Resource Creation Methods
+    # Functions to manage internal resource
     #
     ###########################################################################
     #
@@ -172,6 +176,33 @@ class AppCoreManager(AppCoreModuleBase):
         return self.__manager
 
 
+    #
+    # _get_watchdog
+    #
+    def _get_watchdog(self) -> WatchdogClass:
+        '''
+        Get the internal watchdog for AppCore
+
+        Args:
+            None
+
+        Returns:
+            WatchdogClass
+
+        Raises:
+            None
+        '''
+        if not self.__watchdog:
+            self.__watchdog = self.Watchdog(interval=10.0)
+
+        return self.__watchdog
+
+
+    ###########################################################################
+    #
+    # Resource Creation Methods
+    #
+    ###########################################################################
     #
     # Thread
     #
@@ -673,6 +704,77 @@ class AppCoreManager(AppCoreModuleBase):
             log_file=self._log_file,
             log_to_console=self.log_to_console
         )
+
+
+    #
+    # TelemetryServer
+    #
+    def TelemetryServer(
+            self,
+            hostname: str = "localhost",
+            port: int = 8180,
+    ) -> TelemetryServerClass: 
+        '''
+        Create a telemetry server
+
+        Args:
+            hostname (str): Used to identify interface to bind to
+            port (int): The TCP port to listen on
+
+        Returns:
+            TelemetryServerClass: An instance of the Telemetry Server Class
+            Task: A task running the web server
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Creating INI File datastore")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        _datastore = DataStoreSystem(
+            data=_manager.dict(),
+            data_expiry=_manager.list(),
+            security="low",
+            dot_names=True,
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
+
+        _ts = TelemetryServerClass(
+            datastore=_datastore,
+            hostname=hostname,
+            port=port,
+        )
+
+        # Create a thread to run the web server
+        _web_server_task = Task(
+            name="Telemetry Web Server",
+            context=self.__context,
+            info_dict=_manager.dict(),
+            results_dict=_manager.dict(),
+            start_event=_manager.Event(),
+            stop_event=_manager.Event(),
+            target=_ts.run_web_server,
+            target_kwargs={},
+            stop_function=_ts.shutdown_web_server,
+            stop_kwargs={},
+            task_type="thread",
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
+
+        # Add the tasks to the watchdog
+        _watchdog = self._get_watchdog()
+        _watchdog.register(
+            task=_web_server_task,
+            label="Telemetry Web Server"
+        )
+
+        return _ts
 
 
 ###########################################################################

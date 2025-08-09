@@ -34,10 +34,11 @@ from crypto_tools.constants import ENCODE_METHOD
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
+from appcore.conversion import to_json
+import appcore.datastore.exception as exception
 
 # Imports for python variable type hints
 from typing import Any
-from threading import Lock as LockType
 
 
 ###########################################################################
@@ -70,7 +71,8 @@ class DataStoreBaseClass(AppCoreModuleBase):
     The base class to be use for all datastore classeses
 
     Attributes:
-        None
+        dot_names (bool) [ReadOnly]: If true, dots in item names indicate a
+            hierachy.
     '''
 
     #
@@ -82,6 +84,7 @@ class DataStoreBaseClass(AppCoreModuleBase):
             password: str = "",
             salt: bytes = b"",
             security: str = "high",
+            dot_names: bool = False,
             **kwargs
     ):
         '''
@@ -96,6 +99,9 @@ class DataStoreBaseClass(AppCoreModuleBase):
                 salt will be used in none provided
             security (str): Determines the computation time of the key.  Must
                 be one of "low", "medium", or "high"
+            dot_names (bool): If True, use dot names to create a hierarchy of
+                values for this data store.  If False, dots in names are
+                treated as normal characters
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -117,6 +123,8 @@ class DataStoreBaseClass(AppCoreModuleBase):
         )
         self.logger.debug("Encryption Key has been created")
 
+        self._dot_names = dot_names
+
         # Attributes
 
 
@@ -125,6 +133,13 @@ class DataStoreBaseClass(AppCoreModuleBase):
     # Properties
     #
     ###########################################################################
+    #
+    # dot_names
+    #
+    @property
+    def dot_names(self) -> bool:
+        ''' If True, dots in names are used to create hierarchy '''
+        return self._dot_names
 
 
     ###########################################################################
@@ -132,6 +147,9 @@ class DataStoreBaseClass(AppCoreModuleBase):
     # Storage Methods
     #
     ###########################################################################
+    #
+    # _encrypt
+    #
     def _encrypt(
             self,
             value: str = ""
@@ -167,6 +185,9 @@ class DataStoreBaseClass(AppCoreModuleBase):
             return _encrypted_string
 
 
+    #
+    # _decrypt
+    #
     def _decrypt(
             self,
             value: str = ""
@@ -193,6 +214,97 @@ class DataStoreBaseClass(AppCoreModuleBase):
             return ""
         else:
             return str(_decrypted_string)
+
+
+    #
+    # _export_to_json
+    #
+    def _export_to_json(
+            self,
+            data: Any = None,
+            skip_invalid: bool = False
+    ) -> str:
+        '''
+        Export the datastore in JSON format
+            
+        Args:
+            data (any): The data to be exported
+            skip_invalid (bool): Skip objects that cannot be serialised rather
+                than raising TypeError
+        
+        Returns:
+            string: The datastore as a JSON string
+
+        Raises:
+            None
+        '''
+        _export_data = data or ""
+
+        if self._dot_names:
+            if not isinstance(data, dict):
+                raise exception.DataStoreDotNameError(
+                    "Data to be converted is not in dict format"
+                )
+    
+            # Create a dict with the hierarchy based on the dot names
+            _export_data = {}
+            _dot_keys = sorted(data.keys())
+
+            for _key in _dot_keys:
+                _rest = _key
+                _cur_level = _export_data
+
+                while _rest:
+                    # Split the name to get the first level (and the rest)
+                    # If no dot in the name, then _rest will be empty
+                    (_level, _, _rest) = _rest.partition(".")
+
+                    if not _rest:
+                        # This is the item name
+                        _cur_level[_level] = data[_key]
+
+                    elif not _level in _cur_level:
+                        _cur_level[_level] = {}
+
+                    # Move on to the next level
+                    _cur_level = _cur_level[_level]
+
+
+        return to_json(data=_export_data, skip_invalid=skip_invalid)
+
+
+    ###########################################################################
+    #
+    # Dot Name Handling
+    #
+    ###########################################################################
+    def _check_dot_name(
+            self,
+            keys: list = [],
+            name: str = ""
+    ) -> bool:
+        '''
+        Check the Dot name to ensure a value isn't going to be stored in a
+        sub-level name
+            
+        Args:
+            keys (list): A list of keys in the datastore
+            name (str): The name to check
+        
+        Returns:
+            bool: True if the name is OK, False otherwise
+
+        Raises:
+            None
+        '''
+        assert isinstance(keys, list), "Keys must be a list of key names"
+
+        # Go through the whole list looking for the name
+        for _key in sorted(keys):
+            if str(_key).find(name) == 0:
+                return False
+
+        return True
 
 
 ###########################################################################

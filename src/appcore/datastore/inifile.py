@@ -35,6 +35,7 @@ import configparser
 # Local app modules
 from appcore.datastore.datastore_base import DataStoreBaseClass
 from appcore.conversion import to_json, from_json, set_value, DataType
+import appcore.datastore.exception as exception
 
 # Imports for python variable type hints
 from typing import Any
@@ -108,6 +109,8 @@ class DataStoreINIFile(DataStoreBaseClass):
             AssertionError:
                 When a filename is not supplied
                 When a SyncManager list is not provided to handle expiry
+            DataStoreDotNameError:
+                When dot name hierarchies are used (not supported)
         '''
         assert filename, f"A file name is required for the INI file"
         assert lock, f"A lock is required to implement the INIFile datastore"
@@ -115,6 +118,12 @@ class DataStoreINIFile(DataStoreBaseClass):
             f"A SyncManager list is required to implement the INIFile datastore"
 
         super().__init__(*args, **kwargs)
+
+        # Check on dot names
+        if self._dot_names:
+            raise exception.DataStoreDotNameError(
+                "Dot name hierarchies are not supported in INI file datastores"
+            )
 
         # Private Attributes
         self.__filename: str = filename
@@ -206,8 +215,15 @@ class DataStoreINIFile(DataStoreBaseClass):
             None
 
         Raises:
-            None
+            DataStoreDotNameError:
+                When dot name hierarchies are used (not supported)
         '''
+        # Check on dot names
+        if self._dot_names:
+            raise exception.DataStoreDotNameError(
+                "Dot name hierarchies are not supported in INI file datastores"
+            )
+
         # Process the expiry list
         _now = self.timestamp()
         _sorted_expiry_list = sorted(self.__data_expiry)
@@ -469,6 +485,35 @@ class DataStoreINIFile(DataStoreBaseClass):
         # Check if the INI File exists and delete it
         if os.path.exists(self.__filename):
             os.remove(self.__filename)
+
+
+    ###########################################################################
+    #
+    # Export Functions
+    #
+    ###########################################################################
+    #
+    # export_to_json
+    #
+    def export_to_json(self) -> str:
+        '''
+        Export the data store to JSON
+
+        Args:
+            None
+
+        Returns:
+            str: The JSON string
+
+        Raises:
+            None
+        '''
+        # Get the config file and convert it to a dict
+        _config = self.__read_ini()
+        _data = {s:dict(_config.items(s)) for s in _config.sections()}
+
+        # Convert to JSON
+        return self._export_to_json(data=_data, skip_invalid=True)
 
 
 ###########################################################################
