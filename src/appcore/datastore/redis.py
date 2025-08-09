@@ -322,6 +322,8 @@ class DataStoreRedis(DataStoreBaseClass):
         Raises:
             AssertionError:
                 When timeout is not zero or a positive integer
+            DataStoreDotNameError:
+                When the dot name is a low part of a hierarchy
         '''
         assert isinstance(timeout, int), "Timeout value must be an integer"
         assert timeout >= 0, "Timeout value must be a postive integer"

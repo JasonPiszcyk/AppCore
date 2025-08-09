@@ -29,6 +29,8 @@ along with this program (See file: COPYING). If not, see
 # System Modules
 from multiprocessing import get_context
 import logging
+import time
+import schedule
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
@@ -537,7 +539,8 @@ class AppCoreManager(AppCoreModuleBase):
             self,
             password: str = "",
             salt: bytes = b"",
-            security: str = "high"
+            security: str = "high",
+            dot_names: bool = False
     ) -> DataStoreLocal:
         '''
         Create a Local Datastore (using the multiprocessing manager)
@@ -549,6 +552,9 @@ class AppCoreManager(AppCoreModuleBase):
                 salt will be used in none provided
             security (str): Determines the computation time of the key.  Must
                 be one of "low", "medium", or "high"
+            dot_names (bool): If True, use dot names to create a hierarchy of
+                values for this data store.  If False, dots in names are
+                treated as normal characters
 
         Returns:
             DataStoreLocal: An instance of a Local Datastore
@@ -566,6 +572,7 @@ class AppCoreManager(AppCoreModuleBase):
             password=password,
             salt=salt,
             security=security,
+            dot_names=dot_names,
             log_level=self._log_level,
             log_file=self._log_file,
             log_to_console=self.log_to_console
@@ -579,7 +586,8 @@ class AppCoreManager(AppCoreModuleBase):
             self,
             password: str = "",
             salt: bytes = b"",
-            security: str = "high"
+            security: str = "high",
+            dot_names: bool = False
     ) -> DataStoreSystem:
         '''
         Create a System Datastore (using the multiprocessing manager)
@@ -591,6 +599,9 @@ class AppCoreManager(AppCoreModuleBase):
                 salt will be used in none provided
             security (str): Determines the computation time of the key.  Must
                 be one of "low", "medium", or "high"
+            dot_names (bool): If True, use dot names to create a hierarchy of
+                values for this data store.  If False, dots in names are
+                treated as normal characters
 
         Returns:
             DataStoreSystem: An instance of a System Datastore
@@ -609,6 +620,7 @@ class AppCoreManager(AppCoreModuleBase):
             password=password,
             salt=salt,
             security=security,
+            dot_names=dot_names,
             log_level=self._log_level,
             log_file=self._log_file,
             log_to_console=self.log_to_console
@@ -623,6 +635,7 @@ class AppCoreManager(AppCoreModuleBase):
             password: str = "",
             salt: bytes = b"",
             security: str = "high",
+            dot_names: bool = False,
             **kwargs: KeywordDictType
     ) -> DataStoreRedis:
         '''
@@ -635,6 +648,9 @@ class AppCoreManager(AppCoreModuleBase):
                 salt will be used in none provided
             security (str): Determines the computation time of the key.  Must
                 be one of "low", "medium", or "high"
+            dot_names (bool): If True, use dot names to create a hierarchy of
+                values for this data store.  If False, dots in names are
+                treated as normal characters
             kwargs (dict): List of redis parameters to be pass to the redis
                 connection
 
@@ -653,6 +669,7 @@ class AppCoreManager(AppCoreModuleBase):
             password=password,
             salt=salt,
             security=security,
+            dot_names=dot_names,
             log_level=self._log_level,
             log_file=self._log_file,
             log_to_console=self.log_to_console,
@@ -707,9 +724,76 @@ class AppCoreManager(AppCoreModuleBase):
 
 
     #
-    # TelemetryServer
+    # StartScheduler
     #
-    def TelemetryServer(
+    def StartScheduler(self): 
+        '''
+        Start a thread to run any scheduled tasks
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Starting Scheduler")
+
+        # Ensure the multiprocessing manager has been created
+        _manager = self._get_manager()
+
+        # Args for the Task functions
+        _kwargs = {
+            "stop_event": _manager.Event()
+        }
+
+        # Functions for the task
+        def _run_scheduler(stop_event):
+            while not stop_event.is_set():
+                # Run any pending scheduled tasks
+                schedule.run_pending()
+                time.sleep(1)
+
+            stop_event.clear()
+
+
+        def _stop_scheduler(stop_event):
+            # Set the event to end the scheduler
+            stop_event.set()
+
+
+        # Create a thread to run the scheduler
+        _scheduler_task = Task(
+            name="Scheduler Server",
+            context=self.__context,
+            info_dict=_manager.dict(),
+            results_dict=_manager.dict(),
+            start_event=_manager.Event(),
+            stop_event=_manager.Event(),
+            target=_run_scheduler,
+            target_kwargs=_kwargs,
+            stop_function=_stop_scheduler,
+            stop_kwargs=_kwargs,
+            task_type="thread",
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
+
+        # Add the tasks to the watchdog
+        _watchdog = self._get_watchdog()
+        _watchdog.register(
+            task=_scheduler_task,
+            label="Scheduler Server"
+        )
+
+
+    #
+    # StartTelemetryServer
+    #
+    def StartTelemetryServer(
             self,
             hostname: str = "localhost",
             port: int = 8180,
@@ -728,7 +812,7 @@ class AppCoreManager(AppCoreModuleBase):
         Raises:
             None
         '''
-        self.logger.debug(f"Creating INI File datastore")
+        self.logger.debug(f"Starting Telemetry Server")
 
         # Ensure the multiprocessing manager has been created
         _manager = self._get_manager()
@@ -743,8 +827,19 @@ class AppCoreManager(AppCoreModuleBase):
             log_to_console=self.log_to_console
         )
 
+        _jobstore = DataStoreSystem(
+            data=_manager.dict(),
+            data_expiry=_manager.list(),
+            security="low",
+            dot_names=True,
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
+
         _ts = TelemetryServerClass(
             datastore=_datastore,
+            jobstore=_jobstore,
             hostname=hostname,
             port=port,
         )

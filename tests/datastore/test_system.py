@@ -25,6 +25,7 @@ import time
 from appcore.typing import TaskStatus
 import crypto_tools
 import json
+import appcore.datastore.exception as exception
 
 #
 # Globals
@@ -38,6 +39,10 @@ DEFAULT_TASK_STR_VALUE = "default_string_value_for_task"
 TASK_STR = "task.variable"
 TASK_STR_VALUE = "Value for task variable"
 CHANGE_TASK_STR_VALUE = "New value for the task variable"
+
+DOT_NAME_LIST = [ "1", "2.1", "2.2" , "2.3.1" ]
+INVALID_DOT_NAME = "1.1"
+
 
 ###########################################################################
 #
@@ -276,6 +281,33 @@ class Test_System_Datastore():
         self._assert_set_enc(
             ds, TASK_STR, CHANGE_TASK_STR_VALUE, DEFAULT_TASK_STR_VALUE
         )
+
+
+    def test_basic_dotname(self, manager):
+        ''' Test the basics has/get/set/delete '''
+        ds = manager.SystemDataStore(security="low", dot_names=True)
+
+        for _name in DOT_NAME_LIST:
+            self._assert_not_set(
+                ds, _name, f"{_name}_value", DEFAULT_SIMPLE_STR_VALUE
+            )
+
+            ds.set(_name, f"{_name}_value")
+            self._assert_set(
+                ds, _name, f"{_name}_value", DEFAULT_SIMPLE_STR_VALUE
+            )
+
+        # Test writing to an invalid dot name (eg part of the subtree)
+        with pytest.raises(exception.DataStoreDotNameError):
+            _name = INVALID_DOT_NAME
+            ds.set(_name, f"{_name}_value")
+
+        for _name in DOT_NAME_LIST:
+            ds.delete(_name)
+            self._assert_not_set(
+                ds, _name, f"{_name}_value", DEFAULT_SIMPLE_STR_VALUE
+            )
+
 
 
 ###########################################################################

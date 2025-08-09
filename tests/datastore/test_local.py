@@ -22,11 +22,8 @@ along with this program (See file: COPYING). If not, see
 # System Imports
 import pytest
 import time
-from datetime import datetime
-from appcore.multitasking.message_frame import MessageType
-import appcore.multitasking.exception as exception
-from appcore.typing import TaskStatus
 import crypto_tools
+import appcore.datastore.exception as exception
 
 #
 # Globals
@@ -34,6 +31,9 @@ import crypto_tools
 DEFAULT_STR_VALUE = "default_string_value"
 SIMPLE_STR = "simple.variable"
 SIMPLE_STR_VALUE = "Value for simple variable"
+
+DOT_NAME_LIST = [ "1", "2.1", "2.2" , "2.3.1" ]
+INVALID_DOT_NAME = "1.1"
 
 
 ###########################################################################
@@ -159,6 +159,32 @@ class Test_Local_Datastore():
         self._assert_not_set(
             ds, SIMPLE_STR, SIMPLE_STR_VALUE, DEFAULT_STR_VALUE
         )
+
+
+    def test_basic_dotname(self, manager):
+        ''' Test the basics has/get/set/delete '''
+        ds = manager.SystemDataStore(security="low", dot_names=True)
+
+        for _name in DOT_NAME_LIST:
+            self._assert_not_set(
+                ds, _name, f"{_name}_value", DEFAULT_STR_VALUE
+            )
+
+            ds.set(_name, f"{_name}_value")
+            self._assert_set(
+                ds, _name, f"{_name}_value", DEFAULT_STR_VALUE
+            )
+
+        # Test writing to an invalid dot name (eg part of the subtree)
+        with pytest.raises(exception.DataStoreDotNameError):
+            _name = INVALID_DOT_NAME
+            ds.set(_name, f"{_name}_value")
+
+        for _name in DOT_NAME_LIST:
+            ds.delete(_name)
+            self._assert_not_set(
+                ds, _name, f"{_name}_value", DEFAULT_STR_VALUE
+            )
 
 
 ###########################################################################

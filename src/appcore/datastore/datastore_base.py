@@ -298,10 +298,14 @@ class DataStoreBaseClass(AppCoreModuleBase):
             None
         '''
         assert isinstance(keys, list), "Keys must be a list of key names"
+        assert name, "A name is required to check"
 
         # Go through the whole list looking for the name
+        self.logger.debug(f"Keys: >{sorted(keys)}, Name: >{name}<")
         for _key in sorted(keys):
-            if str(_key).find(name) == 0:
+            if name == _key: continue
+
+            if str(name).find(_key) == 0:
                 return False
 
         return True
