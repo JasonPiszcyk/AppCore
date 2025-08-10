@@ -28,6 +28,7 @@ along with this program (See file: COPYING). If not, see
 
 # System Modules
 import enum
+from datetime import datetime, timezone
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
@@ -88,6 +89,7 @@ class _ScheduleDescription():
             scheduler: Scheduler | None = None,
             schedule_type: str = "once",
             interval: int = 0,
+            time: str = "",
             **kwargs
     ):
         '''
@@ -101,6 +103,7 @@ class _ScheduleDescription():
                 One of: "once", "interval", "at"
             interval (int): For interval schedule type, how oftern to run
                 the job (in seconds)
+            time (str): Time in format HH:MM:SS (24 hour)
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -111,10 +114,21 @@ class _ScheduleDescription():
             AssertionError:
                 when scheduler is not provided
                 when interval is not an integer or not positive
+                when time is not a string or correct format
         '''
         assert isinstance(scheduler, Scheduler), "a scheduler must be provided"
         assert isinstance(interval, int), "interval must be an integer"
         assert interval >= 0, "interval must be positive"
+
+        # Check the time format is valid
+        if not time:
+            self.__at_timestamp = 0
+            self.__time = ""
+
+        else:
+            self.__at_timestamp = self._timestamp_from_time(time=time)
+            self.__time = time
+
         super().__init__(*args, **kwargs)
 
         # Private Attributes
@@ -175,6 +189,111 @@ class _ScheduleDescription():
 
     ###########################################################################
     #
+    # Schedule Creation
+    #
+    ###########################################################################
+    #
+    # _timestamp_from_time
+    #
+    def _timestamp_from_time(
+            self,
+            time: str = "",
+    ) -> int:
+        '''
+        Create a timestamp from the time string
+
+        Args:
+            time (str): Time as a string in the format HH:MM
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError:
+                time is not a string or is invalid
+        '''
+        assert isinstance(time, str), "time must be a string"
+        assert time, "time cannot be empty"
+
+        _date = datetime.strftime(
+            datetime.now(timezone.utc),
+            "%Y-%m-%d"
+        )
+        try:
+            _at = datetime.strptime(f"{_date} {time}", "%Y-%m-%d %H:%M")
+        
+        except:
+            assert False, "time must be in format HH:MM"
+
+        _now_timestamp = AppCoreModuleBase.timestamp()
+        _at_timestamp = _at.timestamp()
+
+        # If the timestamp is in the past, set it for same time a day later
+        if _now_timestamp > _at_timestamp:
+            _at_timestamp = _at_timestamp + 86400
+
+        return int(_at_timestamp)
+
+
+    #
+    # every
+    #
+    def every(
+            self,
+            interval: int = 1,
+    ) -> _ScheduleDescription:
+        '''
+        Create an interval based schedule
+
+        Args:
+            interval (int): The interval to run the task
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError:
+                interval is not an int or not positive
+        '''
+        assert isinstance(interval, int), "interval must be an integer"
+        assert interval > 0, "interval must be positive"
+
+        self.__interval = interval
+
+        return self
+
+
+    #
+    # at
+    #
+    def at(
+            self,
+            time: str = "",
+    ) -> _ScheduleDescription:
+        '''
+        Create a schedule at a specific time
+
+        Args:
+            interval (int): The interval to run the task
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError:
+                time is not a string or is empty
+        '''
+        assert isinstance(time, str), "time must be a string"
+        assert time, "time must be a string in format HH:MM"
+
+        self.__at_timestamp = self._timestamp_from_time(time=time)
+        self.__time = time
+
+        return self
+
+
+    ###########################################################################
+    #
     # Calculate the number of seconds until the next run
     #
     ###########################################################################
@@ -205,7 +324,8 @@ class _ScheduleDescription():
                 return self.__interval * 3600
 
         if self.__schedule_type == "at":
-            return 0
+            _now_timestamp = AppCoreModuleBase.timestamp()
+            return self.__at_timestamp - _now_timestamp
 
         # For all other type of schedule return 0
         return 0
@@ -449,6 +569,36 @@ class Scheduler(AppCoreModuleBase):
             scheduler=self,
             schedule_type="interval",
             interval=interval
+        )
+
+
+    #
+    # at
+    #
+    def at(
+            self,
+            time: str = "",
+    ) -> _ScheduleDescription:
+        '''
+        Create a schedule at a specific time
+
+        Args:
+            interval (int): The interval to run the task
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError:
+                time is not a string or is empty
+        '''
+        assert isinstance(time, str), "time must be a string"
+        assert time, "time must be a string in format HH:MM:SS"
+
+        return _ScheduleDescription(
+            scheduler=self,
+            schedule_type="at",
+            time=time
         )
 
 

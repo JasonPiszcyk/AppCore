@@ -23,6 +23,7 @@ along with this program (See file: COPYING). If not, see
 import pytest
 import time
 import os
+from datetime import datetime, timezone, timedelta
 
 #
 # Globals
@@ -60,9 +61,9 @@ def delete_file():
 #
 class Test_Scheduler():
     #
-    # Basic test of scheduler
+    # Interval scheduler
     #
-    def test_basic_schedule(self, manager):
+    def test_interval_schedule(self, manager):
         # Start the scheduler
         _scheduler = manager.StartScheduler()
 
@@ -84,3 +85,31 @@ class Test_Scheduler():
 
         delete_file()
         assert not os.path.exists(TEST_FILE)
+
+    #
+    # At scheduler
+    #
+    # def test_at_schedule(self, manager):
+    #     # Start the scheduler
+    #     _scheduler = manager.StartScheduler()
+
+    #     delete_file()
+    #     assert not os.path.exists(TEST_FILE)
+
+    #     # Schedule the file to be created in 1 minute
+    #     _task = manager.Thread(
+    #         name = f"Create File",
+    #         target = create_file
+    #     )
+
+    #     # _time = datetime.now(timezone.utc) + timedelta(minutes=1)
+    #     _time = datetime.now() + timedelta(minutes=1)
+    #     _scheduler.at(datetime.strftime(_time, "%H:%M")).run(_task)
+
+    #     time.sleep(90)
+    #     assert os.path.exists(TEST_FILE)
+
+    #     manager.shutdown()
+
+    #     delete_file()
+    #     assert not os.path.exists(TEST_FILE)
