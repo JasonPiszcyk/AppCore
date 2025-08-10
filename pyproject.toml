@@ -19,6 +19,7 @@ dependencies = [
   "requests",
   "urllib3",
   "pytest",
+  "schedule",
 ]
 
 [project.urls]

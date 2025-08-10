@@ -30,12 +30,12 @@ along with this program (See file: COPYING). If not, see
 from multiprocessing import get_context
 import logging
 import time
-import schedule
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
 from appcore.multitasking.task import Task, TaskType
 from appcore.multitasking.watchdog import Watchdog as WatchdogClass
+from appcore.multitasking.scheduler import Scheduler as SchedulerClass
 from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
 from appcore.datastore.system import DataStoreSystem
@@ -66,6 +66,7 @@ from appcore.typing import KeywordDictType, LoggingLevel
 #
 # Constants
 #
+SERVER_TIMEOUT = 1.0
 
 #
 # Global Variables
@@ -120,6 +121,9 @@ class AppCoreManager(AppCoreModuleBase):
         # Don't create a watchdog until needed
         self.__watchdog: WatchdogClass | None = None
 
+        # Don't create a scheduler until needed
+        self.__scheduler: SchedulerClass | None = None
+
         # Attributes
 
 
@@ -148,7 +152,7 @@ class AppCoreManager(AppCoreModuleBase):
 
     ###########################################################################
     #
-    # Functions to manage internal resource
+    # Functions to manage internal resources
     #
     ###########################################################################
     #
@@ -198,6 +202,34 @@ class AppCoreManager(AppCoreModuleBase):
             self.__watchdog = self.Watchdog(interval=10.0)
 
         return self.__watchdog
+
+
+    #
+    # shutdown
+    #
+    def shutdown(self) -> None:
+        '''
+        Shutdown any servers started by the manager
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Shutting Down")
+
+        # See if a scheduler is running
+        if self.__scheduler:
+            self.StopScheduler()
+            time.sleep(SERVER_TIMEOUT)
+
+        # See if a watchdog is running
+        if self.__watchdog: self.__watchdog.loop_stop()
+
 
 
     ###########################################################################
@@ -726,7 +758,7 @@ class AppCoreManager(AppCoreModuleBase):
     #
     # StartScheduler
     #
-    def StartScheduler(self): 
+    def StartScheduler(self) -> SchedulerClass: 
         '''
         Start a thread to run any scheduled tasks
 
@@ -734,35 +766,27 @@ class AppCoreManager(AppCoreModuleBase):
             None
 
         Returns:
-            None
+            Scheduler - A scheduler instance
 
         Raises:
             None
         '''
+        if self.__scheduler: return self.__scheduler
+
         self.logger.debug(f"Starting Scheduler")
 
         # Ensure the multiprocessing manager has been created
         _manager = self._get_manager()
 
-        # Args for the Task functions
-        _kwargs = {
-            "stop_event": _manager.Event()
-        }
-
-        # Functions for the task
-        def _run_scheduler(stop_event):
-            while not stop_event.is_set():
-                # Run any pending scheduled tasks
-                schedule.run_pending()
-                time.sleep(1)
-
-            stop_event.clear()
-
-
-        def _stop_scheduler(stop_event):
-            # Set the event to end the scheduler
-            stop_event.set()
-
+        # Create a scheduler
+        self.__scheduler = SchedulerClass(
+            jobs=_manager.dict(),
+            stop_event=_manager.Event(),
+            interval_event=_manager.Event(),
+            log_level=self._log_level,
+            log_file=self._log_file,
+            log_to_console=self.log_to_console
+        )
 
         # Create a thread to run the scheduler
         _scheduler_task = Task(
@@ -772,10 +796,10 @@ class AppCoreManager(AppCoreModuleBase):
             results_dict=_manager.dict(),
             start_event=_manager.Event(),
             stop_event=_manager.Event(),
-            target=_run_scheduler,
-            target_kwargs=_kwargs,
-            stop_function=_stop_scheduler,
-            stop_kwargs=_kwargs,
+            target=self.__scheduler.run_scheduler,
+            target_kwargs={},
+            stop_function=self.__scheduler.stop_scheduler,
+            stop_kwargs={},
             task_type="thread",
             log_level=self._log_level,
             log_file=self._log_file,
@@ -786,6 +810,33 @@ class AppCoreManager(AppCoreModuleBase):
         _watchdog = self._get_watchdog()
         _watchdog.register(
             task=_scheduler_task,
+            label="Scheduler Server"
+        )
+
+        return self.__scheduler
+
+
+    #
+    # StopScheduler
+    #
+    def StopScheduler(self) -> None: 
+        '''
+        Stop the scheduler
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Stopping Scheduler")
+
+        # Remove the task from the watchdog
+        _watchdog = self._get_watchdog()
+        _watchdog.deregister(
             label="Scheduler Server"
         )
 
