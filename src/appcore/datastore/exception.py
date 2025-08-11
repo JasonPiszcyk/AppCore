@@ -68,6 +68,11 @@ class DataStoreDotNameError(Exception):
     pass
 
 
+class DataStoreUnknownFormatError(Exception):
+    ''' Unknown format in the datastore '''
+    pass
+
+
 ###########################################################################
 #
 # In case this is run directly rather than imported...

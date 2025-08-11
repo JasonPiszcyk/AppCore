@@ -39,6 +39,7 @@ import appcore.datastore.exception as exception
 
 # Imports for python variable type hints
 from typing import Any
+from multiprocessing.managers import DictProxy
 
 
 ###########################################################################
@@ -215,64 +216,6 @@ class DataStoreBaseClass(AppCoreModuleBase):
         else:
             return str(_decrypted_string)
 
-
-    #
-    # _export_to_json
-    #
-    def _export_to_json(
-            self,
-            data: Any = None,
-            skip_invalid: bool = False
-    ) -> str:
-        '''
-        Export the datastore in JSON format
-            
-        Args:
-            data (any): The data to be exported
-            skip_invalid (bool): Skip objects that cannot be serialised rather
-                than raising TypeError
-        
-        Returns:
-            string: The datastore as a JSON string
-
-        Raises:
-            None
-        '''
-        _export_data = data or ""
-
-        if self._dot_names:
-            if not isinstance(data, dict):
-                raise exception.DataStoreDotNameError(
-                    "Data to be converted is not in dict format"
-                )
-    
-            # Create a dict with the hierarchy based on the dot names
-            _export_data = {}
-            _dot_keys = sorted(data.keys())
-
-            for _key in _dot_keys:
-                _rest = _key
-                _cur_level = _export_data
-
-                while _rest:
-                    # Split the name to get the first level (and the rest)
-                    # If no dot in the name, then _rest will be empty
-                    (_level, _, _rest) = _rest.partition(".")
-
-                    if not _rest:
-                        # This is the item name
-                        _cur_level[_level] = data[_key]
-
-                    elif not _level in _cur_level:
-                        _cur_level[_level] = {}
-
-                    # Move on to the next level
-                    _cur_level = _cur_level[_level]
-
-
-        return to_json(data=_export_data, skip_invalid=skip_invalid)
-
-
     ###########################################################################
     #
     # Dot Name Handling
@@ -304,8 +247,14 @@ class DataStoreBaseClass(AppCoreModuleBase):
         for _key in sorted(keys):
             if name == _key: continue
 
+            # Look for a name trying to add a branch where a value is stored
             if str(name).find(f"{_key}.") == 0:
                 return False
+
+            # Look for a name trying to add a value where a branch is
+            if str(_key).find(f"{name}.") == 0:
+                return False
+
 
         return True
 

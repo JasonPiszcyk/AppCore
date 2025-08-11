@@ -327,12 +327,19 @@ class DataStoreSystem(DataStoreBaseClass):
     #
     # export_to_json
     #
-    def export_to_json(self) -> str:
+    def export_to_json(
+            self,
+            container: bool = True
+    ) -> str:
         '''
         Export the data store to JSON
 
         Args:
-            None
+            container (bool): If true, the export contains an outer layer:
+                {
+                    "value": { The export values },
+                    "type": "dictionary"
+                }
 
         Returns:
             str: The JSON string
@@ -341,7 +348,43 @@ class DataStoreSystem(DataStoreBaseClass):
             None
         '''
         # Convert to JSON
-        return self._export_to_json(data=self.__data, skip_invalid=True)
+        self.logger.debug("Exporting Datastore to JSON")
+        _export_data = {}
+
+        # Transform the data to a straight dict
+        _key_list = sorted(self.__data.keys())
+
+        for _key in _key_list:
+
+            # If dot names, handle the hierarchy
+            if self._dot_names:
+                _rest = _key
+                _cur_level = _export_data
+
+                while _rest:
+                    # Split the name to get the first level (and the rest)
+                    # If no dot in the name, then _rest will be empty
+                    (_level, _, _rest) = _rest.partition(".")
+
+                    if not _rest:
+                        # This is the item name
+                        _cur_level[_level] = self.get(_key)
+                        continue
+
+                    elif not _level in _cur_level:
+                        _cur_level[_level] = {}
+
+                    # Move on to the next level
+                    _cur_level = _cur_level[_level]
+
+            else:
+                _export_data[_key] = self.get(_key)
+
+        return to_json(
+            data=_export_data,
+            skip_invalid=True,
+            container=container
+        )
 
 
 ###########################################################################

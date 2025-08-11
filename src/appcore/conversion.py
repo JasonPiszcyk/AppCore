@@ -156,6 +156,7 @@ def get_value_type(
 def to_json(
         data: Any = None,
         skip_invalid: bool = False,
+        container: bool = True
 ) -> str:
     '''
     Convert data to JSON.
@@ -164,6 +165,11 @@ def to_json(
         data (Any): The data to be converted
         skip_invalid (bool): Skip objects that cannot be serialised rather than
             raising TypeError
+        container (bool): If true, the export contains an outer layer:
+            {
+                "value": { The export values },
+                "type": "dictionary"
+            }
 
     Returns:
         str: The data as a JSON string
@@ -176,10 +182,13 @@ def to_json(
     if not data: return ""
 
     # Wrap the data in a dict containing the value and type
-    _json_dict = {
-        "value": data,
-        "type": get_value_type(data).value
-    }
+    if container:
+        _json_dict = {
+            "value": data,
+            "type": get_value_type(data).value
+        }
+    else:
+        _json_dict = data
 
     # Define a function to handle invalid types
     def _null_invalid_types(data):

@@ -27,6 +27,7 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+from threading import enumerate as enumerate_threads
 import traceback
 import uuid
 
@@ -54,7 +55,7 @@ from appcore.multitasking.task import TaskType
 #
 # Constants
 #
-
+WATCHDOG_JOIN_TIMEOUT = 5.0
 
 #
 # Global Variables
@@ -131,6 +132,7 @@ class Watchdog(AppCoreModuleBase):
         self.__interval_event = interval_event
 
         # Attributes
+        self.task_id: str = ""
 
 
     ###########################################################################
@@ -272,6 +274,11 @@ class Watchdog(AppCoreModuleBase):
         # Set the events to exit the loop
         self.__stop_event.set()
         self.__interval_event.set()
+
+        # Join the thread to clean it up
+        for _thread in enumerate_threads():
+            if _thread.name == self.task_id:
+                _thread.join(timeout=WATCHDOG_JOIN_TIMEOUT)
 
 
     ###########################################################################

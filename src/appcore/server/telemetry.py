@@ -27,18 +27,18 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-from threading import Thread
-from http.server import HTTPServer
-from functools import partial
-import schedule
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import requests
+import urllib3
 
 # Local app modules
-from appcore.server.web import SimplePage
 
 # Imports for python variable type hints
 from typing import Any, Callable
 from multiprocessing.managers import DictProxy
+from threading import Event as EventType
 from appcore.datastore.system import DataStoreSystem
+from appcore.multitasking.scheduler import Scheduler as SchedulerClass
 
 
 ###########################################################################
@@ -50,15 +50,26 @@ from appcore.datastore.system import DataStoreSystem
 # Types
 #
 
-
 #
 # Constants
 #
 
-
 #
 # Global Variables
 #
+
+
+###########################################################################
+#
+# TelemetryServer Class Definition
+#
+###########################################################################
+def _update_telemetry_value(ds=None, name="", func=None):
+    if not isinstance(ds, DataStoreSystem): return
+    if not name: return
+    if not callable(func): return
+
+    ds.set(name=name, value=func())
 
 
 ###########################################################################
@@ -83,8 +94,10 @@ class TelemetryServer():
             self,
             datastore: DataStoreSystem | None = None,
             jobdict: DictProxy | None = None,
+            scheduler: SchedulerClass | None = None,
             hostname: str = "localhost",
             port: int = 8180,
+            stop_event: EventType | None = None,
             *args,
             **kwargs
     ):
@@ -97,8 +110,11 @@ class TelemetryServer():
             datastore (DataStoreSystem): A system datastore instance to 
                 store the telemetry in
             jobdict (DictProxy): A SyncManager dict to store job information
+            scheduler (SchedulerClass): A scheduler to use for updating items
+                based on an interval
             hostname (str): Used to identify interface to bind to
             port (int): The TCP port to listen on
+            stop_event (Event): Event to signal the web server to stop
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -106,23 +122,35 @@ class TelemetryServer():
             None
 
         Raises:
-            None
+            AssertionError:
+                when a datastore is not provided
+                when a dict is not provided to store jobs
+                when a scheduler is not provided
+                when the hostname is not a string
+                when the port is not valid
+                when an event is not provided
+
         '''
         assert isinstance(datastore, DataStoreSystem), \
             "A system datastore instance must be provided for the data"
         assert isinstance(jobdict, DictProxy), \
             f"A SyncManager dict must be provided for job information"
+        assert isinstance(scheduler, SchedulerClass), \
+            f"A scheduler must be provided for item updates"
         assert isinstance(hostname, str), "Hostname must be a string"
         assert isinstance(port, int), "Port must be an integer"
         assert port > 0 and port < 65536, "Port must be between 1 and 65536"
+        assert stop_event, "stop_event must be provided"
 
         super().__init__(*args, **kwargs)
 
         # Private Attributes
         self.__datastore = datastore
         self.__jobdict = jobdict
+        self.__scheduler = scheduler
         self.__hostname= hostname or "localhost"
         self.__port = port
+        self.__stop_event = stop_event
         self.__webserver: HTTPServer | None = None
 
         # Attributes
@@ -156,22 +184,52 @@ class TelemetryServer():
         Raises:
             None
         '''
-        _telemetry_web_server = partial(
-            SimplePage,
-            data_func=self.__datastore.export_to_json,
-            content_type="application/json"
-        )
+        _data_export = self.__datastore.export_to_json
+
+        # Define a class to handle the web requests
+        #####################################################################
+        # WebServer Class
+        #####################################################################
+        class WebServer(BaseHTTPRequestHandler):
+            ''' Class to return a single HTTP page with information '''
+            #
+            # do_GET
+            #
+            def do_GET(self) -> None:
+                ''' Perform the get action '''
+                # Only allow request to the root path
+                if self.path != "/":
+                    self.send_response(405)
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers()
+                    return
+
+                # Create the response
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+
+                _data = ""
+                try:
+                    _data = _data_export(container=False)
+                    self.wfile.write(bytes(_data, "utf-8"))
+
+                except:
+                    pass
+
+        #####################################################################
+        # END -> WebServer Class
+        #####################################################################
 
         self.__webserver = HTTPServer(
             (self.__hostname, self.__port),
-            _telemetry_web_server
+            WebServer
         )
 
-        try:
-            self.__webserver.serve_forever()
-        except KeyboardInterrupt:
-            pass
+        while not self.__stop_event.is_set():
+            self.__webserver.handle_request()
 
+        self.__stop_event.clear()
         self.__webserver.server_close()
 
 
@@ -191,38 +249,29 @@ class TelemetryServer():
         Raises:
             None
         '''
-        # Try to end the web server
-        if isinstance(self.__webserver, HTTPServer):
-            self.__webserver.shutdown()
+        # Set the event to end the scheduler
+        self.__stop_event.set()
 
+        # Make a request so the event can be checked!
+        _req_headers = {
+            "Connection": "keep-alive",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept": "application/json",
+        }
 
-    ###########################################################################
-    #
-    # Manage status info
-    #
-    ###########################################################################
-    #
-    # run_thread
-    #
-    @staticmethod
-    def run_thread(func=None):
-        '''
-        Quick and dirty thread to run the value update task
-
-        Args:
-            func (callable): Callable to run in the thread
-
-        Returns:
-            None
-
-        Raises:
-            None
-        '''
-        assert isinstance(func, Callable)
-        assert callable(func)
-
-        _thread = Thread(target=func)
-        _thread.start()
+        # 'quit' on end not important.  Sends a request but doesn't perform
+        # the esxport to provide data
+        _uri = f"http://{self.__hostname}:{self.__port}/quit"
+        urllib3.disable_warnings()
+        try:
+            _ = requests.get(
+                _uri,
+                headers=_req_headers,
+                params={},
+                verify=False
+            )
+        except:
+            pass
 
 
     ###########################################################################
@@ -281,8 +330,7 @@ class TelemetryServer():
             None
         '''
         assert name, "A name is required to set a value"
-        assert isinstance(func, Callable), \
-            "A Function is required to update the value"
+        assert callable(func), "A Function is required to update the value"
         assert isinstance(interval, int), "Interval must be an integer"
         assert interval > 0 and interval < 86401, \
             "Interval must be between 1 and 86400"
@@ -291,16 +339,21 @@ class TelemetryServer():
         self.__datastore.set(name=name, value=None)
 
         # Create a function to update the value
-        def _update_telemetry_value():
-            self.__datastore.set(name=name, value=func())
+        _kwargs = {
+            "ds": self.__datastore,
+            "name": name,
+            "func": func
+        }
 
         # Schedule the function to update the value
-        _job = schedule.every(interval).seconds.do(
-            self.run_thread,
-            _update_telemetry_value
+        _job = self.__scheduler.every(interval).seconds.run(
+            func=_update_telemetry_value,
+            kwargs=_kwargs
         )
 
-        _job.run()
+        # Update the value now
+        # _task.start()
+
         self.__jobdict[name] = _job
 
 
@@ -355,7 +408,7 @@ class TelemetryServer():
 
         # Remove any schedules
         if name in self.__jobdict:
-            schedule.cancel_job(self.__jobdict[name])
+            self.__scheduler.cancel(self.__jobdict[name])
             del self.__jobdict[name]
 
         self.__datastore.delete(name=name)

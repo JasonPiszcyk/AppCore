@@ -57,30 +57,28 @@ def delete_file():
 #
 ###########################################################################
 #
-# is_valid_log_level
+# Test the scheduler
 #
 class Test_Scheduler():
     #
     # Interval scheduler
     #
-    def test_interval_schedule(self, manager):
-        # Start the scheduler
-        _scheduler = manager.StartScheduler()
-
+    def test_interval_schedule(self, manager, scheduler):
         delete_file()
         assert not os.path.exists(TEST_FILE)
 
         # Schedule the file to be created in 1 second
-        _task = manager.Thread(
-            name = f"Create File",
-            target = create_file
+        scheduler.every().second.run(
+            name="Scheduler Test - Create File",
+            func=create_file,
+            kwargs={}
         )
-
-        _scheduler.every().second.run(_task)
 
         time.sleep(2)
         assert os.path.exists(TEST_FILE)
 
+        # Shutdown the scheduler before we delete the file (or it may be
+        # recreated)
         manager.shutdown()
 
         delete_file()
@@ -113,3 +111,15 @@ class Test_Scheduler():
 
     #     delete_file()
     #     assert not os.path.exists(TEST_FILE)
+
+
+###########################################################################
+#
+# In case this is run directly rather than imported...
+#
+###########################################################################
+'''
+Handle case of being run directly rather than imported
+'''
+if __name__ == "__main__":
+    pass

@@ -28,18 +28,19 @@ along with this program (See file: COPYING). If not, see
 
 # System Modules
 import enum
+import uuid
+from threading import Thread
 from datetime import datetime, timezone
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
-from appcore.multitasking.task import Task as TaskType
 from appcore.conversion import set_value, DataType
 
 # Imports for python variable type hints
-from typing import Any
+from typing import Any, Callable
 from multiprocessing.managers import DictProxy
 from threading import Event as EventType
-from appcore.multitasking.task import Task as TaskType
+from appcore.typing import KeywordDictType
 
 
 ###########################################################################
@@ -246,7 +247,7 @@ class _ScheduleDescription():
         Create an interval based schedule
 
         Args:
-            interval (int): The interval to run the task
+            interval (int): The interval to run the job
 
         Returns:
             None
@@ -274,7 +275,7 @@ class _ScheduleDescription():
         Create a schedule at a specific time
 
         Args:
-            interval (int): The interval to run the task
+            interval (int): The interval to run the job
 
         Returns:
             None
@@ -336,36 +337,45 @@ class _ScheduleDescription():
     #
     def run(
             self,
-            task: TaskType | None = None,
-    ):
+            name: str = "",
+            func: Callable | None = None,
+            kwargs: KeywordDictType = {}
+    ) -> str:
         '''
         Add a scheduled job (Usually at the end of a schedule chain)
 
         Args:
-            task (Task): The task to run on a schedule
+            name (str): A name for the job
+            func (callable): The function to be run on a schedule
+            kwargs (dict): Keyword arguments to pass to function
 
         Returns:
             None
 
         Raises:
             AssertionError:
-                When the task is not an AppCore Task
+                When the function is not set
         '''
-        assert isinstance(task, TaskType), "Job must be a Task"
+        assert callable(func), "Function must be provided"
+
+        if not name: name = str(uuid.uuid4())
 
         # Calculate the number of seconds till the next run
         _next_run = self.calc_next_run()
 
         # Append the name to a timestamp to prevent duplicate keys/timestamps
         _timestamp = AppCoreModuleBase.timestamp(offset=_next_run)
-        _job_name = f"{_timestamp}__{task.name}"
+        _job_name = f"{_timestamp}__{name}"
 
         self.__scheduler._add(
             jobname=_job_name,
-            task=task,
+            func=func,
+            kwargs=kwargs,
             schedule_type=self.__schedule_type,
             interval=_next_run
         )
+
+        return name
 
 
 ###########################################################################
@@ -439,7 +449,7 @@ class Scheduler(AppCoreModuleBase):
     #
     def run_scheduler(self) -> None:
         '''
-        Run the scheduler tasks
+        Run the scheduler jobs
 
         Args:
             None
@@ -453,7 +463,7 @@ class Scheduler(AppCoreModuleBase):
         while not self.__stop_event.is_set():
             self.logger.debug(f"Checking jobs")
 
-            # Run any pending scheduled tasks
+            # Run any pending scheduled jobs
             _now = self.timestamp()
             _interval = 3600.0
 
@@ -463,7 +473,7 @@ class Scheduler(AppCoreModuleBase):
             for _entry in _sorted_job_list:
                 self.logger.debug(f"Entry: {_entry}")
                 # Extract the timestamp from the key
-                _timestamp_str, _, _ = _entry.partition("__")
+                _timestamp_str, _, _name = _entry.partition("__")
                 _timestamp = set_value(_timestamp_str, DataType.INT, default=0)            
 
                 # Stop processing if the timestamp is in the future
@@ -476,9 +486,16 @@ class Scheduler(AppCoreModuleBase):
                     break
 
                 # Run the job
-                self.logger.debug(f"Scheduler: Task={self.__jobs[_entry]['task'].name}")
-                self.__jobs[_entry]['task'].start()
-                self.logger.debug(f"Started: Task={self.__jobs[_entry]['task'].name}")
+                self.logger.debug(f"Scheduler: Job={_name}")
+
+                _job_thread = Thread(
+                    target=self.__jobs[_entry]['func'],
+                    kwargs=self.__jobs[_entry]['kwargs'],
+                    name=_entry
+                )
+
+                _job_thread.start()
+                self.logger.debug(f"Started: Job={_name}")
 
                 # Calculate when the job is due again
                 if self.__jobs[_entry]['schedule_type'] == "interval":
@@ -491,8 +508,7 @@ class Scheduler(AppCoreModuleBase):
                 # keys/timestamps
                 if _next_run > 0:
                     _timestamp = self.timestamp(offset=_next_run)
-                    _job_name = f"{_timestamp}__" \
-                        + f"{self.__jobs[_entry]['task'].name}"
+                    _job_name = f"{_timestamp}__{_name}"
 
                     # Create a new job / delete the old one
                     self.__jobs[_job_name] = self.__jobs[_entry]
@@ -507,6 +523,7 @@ class Scheduler(AppCoreModuleBase):
             if self.__interval_event.wait(timeout=_interval):
                 # Event was set, clear it
                 self.__interval_event.clear()
+
 
         self.logger.debug(f"Exiting scheduler loop")
         self.__stop_event.clear()
@@ -553,7 +570,7 @@ class Scheduler(AppCoreModuleBase):
         Create an interval based schedule
 
         Args:
-            interval (int): The interval to run the task
+            interval (int): The interval to run the job
 
         Returns:
             None
@@ -583,7 +600,7 @@ class Scheduler(AppCoreModuleBase):
         Create a schedule at a specific time
 
         Args:
-            interval (int): The interval to run the task
+            interval (int): The interval to run the job
 
         Returns:
             None
@@ -613,7 +630,8 @@ class Scheduler(AppCoreModuleBase):
     def _add(
             self,
             jobname: str = "",
-            task: TaskType | None = None,
+            func: Callable | None = None,
+            kwargs: KeywordDictType = {},
             schedule_type: str = "interval",
             interval: int = 0,
     ) -> None:
@@ -621,8 +639,9 @@ class Scheduler(AppCoreModuleBase):
         Add a scheduled job
 
         Args:
-            name: (str): The job name generated by the schedule
-            task (Task): The task to run
+            jobname: (str): The job name generated by the schedule
+            func (callable): The function to be run on a schedule
+            kwargs (dict): Keyword arguments to pass to function
             schedule_type (str): The type of schedule for this job
                 One of: "once", "interval", "at"
 
@@ -632,14 +651,15 @@ class Scheduler(AppCoreModuleBase):
         Raises:
             AssertionError:
                 When jobname is not a string or empty
-                When the task provided is not of type Task
+                When the func provided is not callable
         '''
         assert isinstance(jobname, str), "jobname must be a string"
         assert jobname, "jobname cannot be empty"
-        assert isinstance(task, TaskType), "Job must be a Task"
+        assert callable(func), "A function must be provided for the job"
 
-        self.__jobs[jobname] ={
-            "task": task,
+        self.__jobs[jobname] = {
+            "func": func,
+            "kwargs": kwargs,
             "schedule_type": schedule_type,
             "interval": interval
         }
@@ -656,10 +676,10 @@ class Scheduler(AppCoreModuleBase):
             name: str = "",
     ) -> None:
         '''
-        Remove scheduled jobs for a task
+        Remove scheduled jobs for 'name'
 
         Args:
-            name (string): The name of the task to be removed
+            name (string): The name of the job to be removed
 
         Returns:
             None
@@ -676,9 +696,9 @@ class Scheduler(AppCoreModuleBase):
         _sorted_job_list = sorted(self.__jobs.keys())
         for _entry in _sorted_job_list:
             # Extract the timestamp from the key
-            _, _, _task_name = _entry.partition("__")
+            _, _, _name_part = _entry.partition("__")
 
-            if name == _task_name:
+            if name == _name_part:
                 del self.__jobs[_entry]
 
 

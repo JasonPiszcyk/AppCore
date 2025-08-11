@@ -94,6 +94,7 @@ class Task(AppCoreModuleBase):
         stop_kwargs (dict): Arguments to pass the stop function
         is_alive (bool): Indicates if the task is alive
         id (int): Id of the thread/process
+        task_id (str): The unique Task ID
         status (str): The status of the task
         results (TaskResults): The results of the class
         task_action (str): String indicating the action Watchdog should take
@@ -230,6 +231,15 @@ class Task(AppCoreModuleBase):
 
         else:
             return None
+
+
+    #
+    # task_id
+    #
+    @property
+    def task_id(self) -> str:
+        ''' Return the unique Task ID '''
+        return self.__task_id
 
 
     #

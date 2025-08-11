@@ -42,7 +42,7 @@ TASK_STR_VALUE = "Value for task variable"
 CHANGE_TASK_STR_VALUE = "New value for the task variable"
 
 DOT_NAME_LIST = [ "1", "2.1", "2.2" , "2.3.1" ]
-INVALID_DOT_NAME = "1.1"
+INVALID_DOT_NAME_LIST = [ "1.1", "2" ]
 
 
 ###########################################################################
@@ -316,10 +316,12 @@ class Test_Redis_Datastore():
                 ds, _name, f"{_name}_value", DEFAULT_SIMPLE_STR_VALUE
             )
 
-        # Test writing to an invalid dot name (eg part of the subtree)
-        with pytest.raises(exception.DataStoreDotNameError):
-            _name = INVALID_DOT_NAME
-            ds.set(_name, f"{_name}_value")
+        # Test writing to an invalid dot name
+        # - trying to add a value in the lower level of a tree
+        # - Trying to add a branch when a value is set
+        for _name in INVALID_DOT_NAME_LIST:
+            with pytest.raises(exception.DataStoreDotNameError):
+                ds.set(_name, f"{_name}_value")
 
         for _name in DOT_NAME_LIST:
             ds.delete(_name)

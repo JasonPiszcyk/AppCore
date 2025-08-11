@@ -29,18 +29,17 @@ along with this program (See file: COPYING). If not, see
 # System Modules
 from multiprocessing import get_context
 import logging
-import time
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
 from appcore.multitasking.task import Task, TaskType
 from appcore.multitasking.watchdog import Watchdog as WatchdogClass
-from appcore.multitasking.scheduler import Scheduler as SchedulerClass
 from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
 from appcore.datastore.system import DataStoreSystem
 from appcore.datastore.redis import DataStoreRedis
 from appcore.datastore.inifile import DataStoreINIFile
+from appcore.multitasking.scheduler import Scheduler as SchedulerClass
 from appcore.server.telemetry import TelemetryServer as TelemetryServerClass
 
 # Imports for python variable type hints
@@ -66,7 +65,12 @@ from appcore.typing import KeywordDictType, LoggingLevel
 #
 # Constants
 #
+APPCORE_WATCHDOG_INTERVAL = 10.0
 SERVER_TIMEOUT = 1.0
+
+LABEL_SCHEDULER = "Scheduler Server"
+LABEL_TELEMETRY_WEB = "Telemetry Web Server"
+
 
 #
 # Global Variables
@@ -123,6 +127,9 @@ class AppCoreManager(AppCoreModuleBase):
 
         # Don't create a scheduler until needed
         self.__scheduler: SchedulerClass | None = None
+
+        # Don't create a telemetry server until requested
+        self.__telemetry_server: TelemetryServerClass | None = None
 
         # Attributes
 
@@ -199,7 +206,7 @@ class AppCoreManager(AppCoreModuleBase):
             None
         '''
         if not self.__watchdog:
-            self.__watchdog = self.Watchdog(interval=10.0)
+            self.__watchdog = self.Watchdog(interval=APPCORE_WATCHDOG_INTERVAL)
 
         return self.__watchdog
 
@@ -222,14 +229,20 @@ class AppCoreManager(AppCoreModuleBase):
         '''
         self.logger.debug(f"Shutting Down")
 
+        # See if a telemetry server is running
+        if self.__telemetry_server:
+            self.StopTelemetryServer()
+            self.__telemetry_server = None
+
         # See if a scheduler is running
         if self.__scheduler:
             self.StopScheduler()
-            time.sleep(SERVER_TIMEOUT)
+            self.__scheduler = None
 
         # See if a watchdog is running
-        if self.__watchdog: self.__watchdog.loop_stop()
-
+        if self.__watchdog:
+            self.__watchdog.loop_stop()
+            self.__watchdog = None
 
 
     ###########################################################################
@@ -389,6 +402,9 @@ class AppCoreManager(AppCoreModuleBase):
         )
 
         _watchdog_task.start()
+
+        # Store the Task ID (so the thread can be cleaned up later)
+        _watchdog.task_id = _watchdog_task.task_id
 
         return _watchdog
 
@@ -790,7 +806,7 @@ class AppCoreManager(AppCoreModuleBase):
 
         # Create a thread to run the scheduler
         _scheduler_task = Task(
-            name="Scheduler Server",
+            name=LABEL_SCHEDULER,
             context=self.__context,
             info_dict=_manager.dict(),
             results_dict=_manager.dict(),
@@ -810,7 +826,7 @@ class AppCoreManager(AppCoreModuleBase):
         _watchdog = self._get_watchdog()
         _watchdog.register(
             task=_scheduler_task,
-            label="Scheduler Server"
+            label=LABEL_SCHEDULER
         )
 
         return self.__scheduler
@@ -837,7 +853,7 @@ class AppCoreManager(AppCoreModuleBase):
         # Remove the task from the watchdog
         _watchdog = self._get_watchdog()
         _watchdog.deregister(
-            label="Scheduler Server"
+            label=LABEL_SCHEDULER
         )
 
 
@@ -863,6 +879,8 @@ class AppCoreManager(AppCoreModuleBase):
         Raises:
             None
         '''
+        if self.__telemetry_server: return self.__telemetry_server
+
         self.logger.debug(f"Starting Telemetry Server")
 
         # Ensure the multiprocessing manager has been created
@@ -878,34 +896,29 @@ class AppCoreManager(AppCoreModuleBase):
             log_to_console=self.log_to_console
         )
 
-        _jobstore = DataStoreSystem(
-            data=_manager.dict(),
-            data_expiry=_manager.list(),
-            security="low",
-            dot_names=True,
-            log_level=self._log_level,
-            log_file=self._log_file,
-            log_to_console=self.log_to_console
-        )
+        # If the scheduler isn't running, start it
+        _scheduler = self.StartScheduler()
 
-        _ts = TelemetryServerClass(
+        self.__telemetry_server = TelemetryServerClass(
             datastore=_datastore,
-            jobstore=_jobstore,
+            jobdict=_manager.dict(),
+            scheduler=_scheduler,
             hostname=hostname,
             port=port,
+            stop_event=_manager.Event()
         )
 
         # Create a thread to run the web server
         _web_server_task = Task(
-            name="Telemetry Web Server",
+            name=LABEL_TELEMETRY_WEB,
             context=self.__context,
             info_dict=_manager.dict(),
             results_dict=_manager.dict(),
             start_event=_manager.Event(),
             stop_event=_manager.Event(),
-            target=_ts.run_web_server,
+            target=self.__telemetry_server.run_web_server,
             target_kwargs={},
-            stop_function=_ts.shutdown_web_server,
+            stop_function=self.__telemetry_server.shutdown_web_server,
             stop_kwargs={},
             task_type="thread",
             log_level=self._log_level,
@@ -917,10 +930,35 @@ class AppCoreManager(AppCoreModuleBase):
         _watchdog = self._get_watchdog()
         _watchdog.register(
             task=_web_server_task,
-            label="Telemetry Web Server"
+            label=LABEL_TELEMETRY_WEB
         )
 
-        return _ts
+        return self.__telemetry_server
+
+
+    #
+    # StopTelemetryServer
+    #
+    def StopTelemetryServer(self) -> None: 
+        '''
+        Stop the telemetry server
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self.logger.debug(f"Stopping Telemetry Server")
+
+        # Remove the task from the watchdog
+        _watchdog = self._get_watchdog()
+        _watchdog.deregister(
+            label=LABEL_TELEMETRY_WEB
+        )
 
 
 ###########################################################################
