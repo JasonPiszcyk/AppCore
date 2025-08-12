@@ -95,7 +95,7 @@ class TelemetryServer():
             datastore: DataStoreSystem | None = None,
             jobdict: DictProxy | None = None,
             scheduler: SchedulerClass | None = None,
-            hostname: str = "localhost",
+            hostname: str = "",
             port: int = 8180,
             stop_event: EventType | None = None,
             *args,
@@ -148,7 +148,7 @@ class TelemetryServer():
         self.__datastore = datastore
         self.__jobdict = jobdict
         self.__scheduler = scheduler
-        self.__hostname= hostname or "localhost"
+        self.__hostname= hostname
         self.__port = port
         self.__stop_event = stop_event
         self.__webserver: HTTPServer | None = None
@@ -192,6 +192,13 @@ class TelemetryServer():
         #####################################################################
         class WebServer(BaseHTTPRequestHandler):
             ''' Class to return a single HTTP page with information '''
+            #
+            # log_request
+            #
+            def log_request(self, code='-', size='-'):
+                return
+
+
             #
             # do_GET
             #
@@ -261,7 +268,8 @@ class TelemetryServer():
 
         # 'quit' on end not important.  Sends a request but doesn't perform
         # the esxport to provide data
-        _uri = f"http://{self.__hostname}:{self.__port}/quit"
+        _hostname = self.__hostname or "localhost"
+        _uri = f"http://{_hostname}:{self.__port}/quit"
         urllib3.disable_warnings()
         try:
             _ = requests.get(

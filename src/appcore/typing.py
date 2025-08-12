@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Constants
+Typing
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com

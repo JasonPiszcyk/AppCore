@@ -110,7 +110,7 @@ class Test_Basic_Queue():
 #
 class Test_Queue_Listener():
     def test_listener_start_stop_thread(self, manager):
-        ''' Test sarting/stopping a listener running in a thread '''
+        ''' Test starting/stopping a listener running in a thread '''
         q = manager.Queue(message_handler=message_handler)
 
         # Create a thread for the listener

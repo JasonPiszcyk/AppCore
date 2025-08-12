@@ -118,7 +118,7 @@ class Watchdog(AppCoreModuleBase):
         assert isinstance(task_stop_dict, DictProxy), \
             f"A SyncManager dict is required to store tasks to be stopped"
         assert isinstance(task_restart_dict, DictProxy), \
-            f"A SyncManager dict is required o store tasks to be restarted"
+            f"A SyncManager dict is required to store tasks to be restarted"
         assert stop_event, "An event is required to stop the watchdog"
         assert interval_event, "An event is required manage watchdog intervals"
 
@@ -180,7 +180,7 @@ class Watchdog(AppCoreModuleBase):
                 for _key in _task_list:
                     _task: TaskType = self.__task_stop_dict[_key]
                     self.logger.info(
-                        f"Watchdog: Task ({_key}: [id={_task.id}] " +
+                        f"Watchdog: Task ({_key}): [id={_task.id}] " +
                         "Stop has been requested"
                     )
                     _task.stop()
@@ -201,7 +201,7 @@ class Watchdog(AppCoreModuleBase):
                 for _key in _task_list:
                     _task: TaskType = self.__task_start_dict[_key]
                     self.logger.info(
-                        f"Watchdog: Task ({_key}: Start has been requested"
+                        f"Watchdog: Task ({_key}): Start has been requested"
                     )
                     _task.start()
 
@@ -241,8 +241,9 @@ class Watchdog(AppCoreModuleBase):
                         )
 
             except:
+                self.logger.error("Watchdog has failed")
                 _exception_stack = traceback.format_exc()
-                self.logger.debug(_exception_stack)
+                self.logger.error(_exception_stack)
 
             # Pause for the interval - Can be woken up if needed
             if self.__interval_event.wait(timeout=interval):
@@ -253,6 +254,7 @@ class Watchdog(AppCoreModuleBase):
         # Reset the events
         self.__stop_event.clear()
         self.__interval_event.clear()
+        self.logger.debug("Watchdog: Ending")
 
 
     #
@@ -271,6 +273,8 @@ class Watchdog(AppCoreModuleBase):
         Raises:
             None
         '''
+        self.logger.debug("Request to stop Watchdog")
+
         # Set the events to exit the loop
         self.__stop_event.set()
         self.__interval_event.set()
@@ -278,7 +282,10 @@ class Watchdog(AppCoreModuleBase):
         # Join the thread to clean it up
         for _thread in enumerate_threads():
             if _thread.name == self.task_id:
+                self.logger.debug("Found Thread - Joining")
                 _thread.join(timeout=WATCHDOG_JOIN_TIMEOUT)
+
+        self.logger.debug("Request to stop Watchdog completed")
 
 
     ###########################################################################
@@ -314,6 +321,8 @@ class Watchdog(AppCoreModuleBase):
         # If the label is empty, generate a uuid as a label
         if not label: label = str(uuid.uuid4())
 
+        self.logger.debug(f"Registering Task: {label}")
+
         # Add the entry to the start task dict
         self.__task_start_dict[label] = task
 
@@ -344,11 +353,15 @@ class Watchdog(AppCoreModuleBase):
         '''
         assert isinstance(label, str), "Label must be a string"
 
+        self.logger.debug(f"Deregistering Task: {label}")
+
         # Set the task to be stopped
         if label in self.__task_start_dict:
+            self.logger.debug("Task in Start Dict")
             self.__task_stop_dict[label] = self.__task_start_dict[label]
 
         elif label in self.__task_restart_dict:
+            self.logger.debug("Task in Restart Dict")
             self.__task_stop_dict[label] = self.__task_restart_dict[label]
 
         self.__interval_event.set()
