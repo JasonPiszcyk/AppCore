@@ -3,7 +3,10 @@ Copyright (c) 2025 Jason Piszcyk
 
 Core Components used to create an application.
 
-To Be done -> ~~[![PyPI version](https://badge.fury.io/py/appcore.svg)](https://pypi.org/project/appcore/)~~
+<!-- 
+Not yet Published to PyPi
+[![PyPI version](https://badge.fury.io/py/appcore.svg)](https://pypi.org/project/appcore/)
+ -->
 [![Build Status](https://github.com/JasonPiszcyk/AppCore/actions/workflows/python-app.yml/badge.svg)](https://github.com/JasonPiszcyk/AppCore/actions)
 
 ## Overview
@@ -41,7 +44,7 @@ To Be done -> ~~[![PyPI version](https://badge.fury.io/py/appcore.svg)](https://
 
 Module has not been published to PyPi yet.  Install via:
 ```bash
-pip install "appcore @ git+https://github.com/JasonPiszcyk/AppCore
+pip install "appcore @ git+https://github.com/JasonPiszcyk/AppCore"
 ```
 
 ## Requirements
