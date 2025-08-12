@@ -267,8 +267,9 @@ class TelemetryServer():
         }
 
         # 'quit' on end not important.  Sends a request but doesn't perform
-        # the esxport to provide data
-        _hostname = self.__hostname or "localhost"
+        # the export to provide data
+        # _hostname = self.__hostname or "localhost"
+        _hostname = "localhost"
         _uri = f"http://{_hostname}:{self.__port}/quit"
         urllib3.disable_warnings()
         try:

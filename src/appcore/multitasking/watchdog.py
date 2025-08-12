@@ -357,11 +357,9 @@ class Watchdog(AppCoreModuleBase):
 
         # Set the task to be stopped
         if label in self.__task_start_dict:
-            self.logger.debug("Task in Start Dict")
             self.__task_stop_dict[label] = self.__task_start_dict[label]
 
         elif label in self.__task_restart_dict:
-            self.logger.debug("Task in Restart Dict")
             self.__task_stop_dict[label] = self.__task_restart_dict[label]
 
         self.__interval_event.set()

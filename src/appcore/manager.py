@@ -27,6 +27,7 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import time
 from multiprocessing import get_context
 import logging
 
@@ -238,6 +239,9 @@ class AppCoreManager(AppCoreModuleBase):
         if self.__scheduler:
             self.StopScheduler()
             self.__scheduler = None
+
+        # Give things a chance to finish
+        time.sleep(1)
 
         # See if a watchdog is running
         if self.__watchdog:
