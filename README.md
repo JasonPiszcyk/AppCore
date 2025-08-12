@@ -6,8 +6,8 @@ Core Components used to create an application.
 <!-- 
 Not yet Published to PyPi
 [![PyPI version](https://badge.fury.io/py/appcore.svg)](https://pypi.org/project/appcore/)
- -->
 [![Build Status](https://github.com/JasonPiszcyk/AppCore/actions/workflows/python-app.yml/badge.svg)](https://github.com/JasonPiszcyk/AppCore/actions)
+ -->
 
 ## Overview
 

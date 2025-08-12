@@ -21,8 +21,7 @@ along with this program (See file: COPYING). If not, see
 '''
 
 # What to import when 'import * from module'
-__all__ = [ "typing", "multitasking" ]
+__all__ = [ "AppCoreManager", ]
 
 # What to import as part of the the module (import module)
-from appcore import typing
-from appcore import multitasking
+from appcore.manager import AppCoreManager
