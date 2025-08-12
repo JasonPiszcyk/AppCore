@@ -57,6 +57,7 @@ pip install "appcore @ git+https://github.com/JasonPiszcyk/AppCore"
 - urllib3
 - pytest
 - redis
+- "crypto_tools @ git+https://github.com/JasonPiszcyk/CryptoTools"
 
 ## Usage
 
