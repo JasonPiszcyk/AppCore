@@ -275,11 +275,22 @@ class Watchdog(AppCoreModuleBase):
         '''
         self.logger.debug("Request to stop Watchdog")
 
-        # Set the events to exit the loop
-        self.__stop_event.set()
-        self.__interval_event.set()
+        # Set all tasks to be stopped
+        for _label in self.__task_start_dict.keys():
+            self.__task_stop_dict[_label] = self.__task_start_dict[_label]
 
-        # Join the thread to clean it up
+        for _label in self.__task_restart_dict.keys():
+            self.__task_stop_dict[_label] = self.__task_restart_dict[_label]
+
+        # Set the events to exit the loop
+        self.__interval_event.set()
+        self.__stop_event.set()
+
+        # Make sure all tasks are stopped
+        for _label in self.__task_stop_dict.keys():
+            self.__task_stop_dict[_label].stop()
+
+        # Join the watchdog thread to clean it up
         for _thread in enumerate_threads():
             if _thread.name == self.task_id:
                 self.logger.debug("Found Thread - Joining")
