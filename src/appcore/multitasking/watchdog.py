@@ -56,6 +56,7 @@ from appcore.multitasking.task import TaskType
 # Constants
 #
 WATCHDOG_JOIN_TIMEOUT = 5.0
+WATCHDOG_SHUTDOWN_TIMEOUT = 5.0
 
 #
 # Global Variables
@@ -87,6 +88,7 @@ class Watchdog(AppCoreModuleBase):
             task_stop_dict: DictProxy[Any, Any] | None = None,
             task_restart_dict: DictProxy[Any, Any] | None = None,
             stop_event: EventType | None = None,
+            shutdown_event: EventType | None = None,
             interval_event: EventType | None = None,
             **kwargs
     ):
@@ -102,6 +104,8 @@ class Watchdog(AppCoreModuleBase):
                 watch and restart if required
             stop_event (Event): A SyncManager event to signal the watchdog to 
                 stop
+            shutdown_event (Event): A SyncManager event to signal the watchdog
+                has finished shutting down 
             interval_event (Event): A SyncManager event to signal the watchdog
                 to skip waiting during the interval
             **kwargs (Undef): Keyword arguments to be passed to the constructor
@@ -120,6 +124,7 @@ class Watchdog(AppCoreModuleBase):
         assert isinstance(task_restart_dict, DictProxy), \
             f"A SyncManager dict is required to store tasks to be restarted"
         assert stop_event, "An event is required to stop the watchdog"
+        assert shutdown_event, "An event is required to sync watchdog shutdown"
         assert interval_event, "An event is required manage watchdog intervals"
 
         super().__init__(*args, **kwargs)
@@ -129,6 +134,7 @@ class Watchdog(AppCoreModuleBase):
         self.__task_stop_dict = task_stop_dict
         self.__task_restart_dict = task_restart_dict
         self.__stop_event = stop_event
+        self.__shutdown_event = shutdown_event
         self.__interval_event = interval_event
 
         # Attributes
@@ -251,6 +257,34 @@ class Watchdog(AppCoreModuleBase):
                 self.__interval_event.clear()
 
 
+        # Set all tasks to be stopped
+        self.logger.debug("Stopping registered tasks")
+
+        _task_list = self.__task_start_dict.keys()
+        for _key in _task_list:
+            _task: TaskType = self.__task_start_dict[_key]
+            self.logger.debug(f"Setting stop (start): {_task.name}")
+            self.__task_stop_dict[_key] = _task
+            del self.__task_start_dict[_key]
+
+        _task_list = self.__task_restart_dict.keys()
+        for _key in _task_list:
+            _task: TaskType = self.__task_restart_dict[_key]
+            self.logger.debug(f"Setting stop (restart): {_task.name}")
+            self.__task_stop_dict[_key] = _task
+            del self.__task_restart_dict[_key]
+
+        _task_list = self.__task_stop_dict.keys()
+        for _key in _task_list:
+            _task: TaskType = self.__task_stop_dict[_key]
+            self.logger.debug(f"Stopping: {_task.name}")
+            _task.stop()
+            del self.__task_stop_dict[_key]
+
+        # Indicate the shutdown is complete
+        self.logger.debug("Shutdown done")
+        self.__shutdown_event.set()
+
         # Reset the events
         self.__stop_event.clear()
         self.__interval_event.clear()
@@ -275,20 +309,12 @@ class Watchdog(AppCoreModuleBase):
         '''
         self.logger.debug("Request to stop Watchdog")
 
-        # Set all tasks to be stopped
-        for _label in self.__task_start_dict.keys():
-            self.__task_stop_dict[_label] = self.__task_start_dict[_label]
-
-        for _label in self.__task_restart_dict.keys():
-            self.__task_stop_dict[_label] = self.__task_restart_dict[_label]
-
         # Set the events to exit the loop
         self.__interval_event.set()
         self.__stop_event.set()
 
-        # Make sure all tasks are stopped
-        for _label in self.__task_stop_dict.keys():
-            self.__task_stop_dict[_label].stop()
+        # Let the watchdog stop
+        self.__shutdown_event.wait(timeout=WATCHDOG_SHUTDOWN_TIMEOUT)
 
         # Join the watchdog thread to clean it up
         for _thread in enumerate_threads():

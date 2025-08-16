@@ -158,6 +158,15 @@ class AppCoreManager(AppCoreModuleBase):
         return self.__manager
 
 
+    #
+    # watchdog
+    #
+    @property
+    def watchdog(self) -> WatchdogClass | None:
+        ''' The manager watchdog instance '''
+        return self._get_watchdog()
+
+
     ###########################################################################
     #
     # Functions to manage internal resources
@@ -241,7 +250,7 @@ class AppCoreManager(AppCoreModuleBase):
             self.__scheduler = None
 
         # Give things a chance to finish
-        time.sleep(1)
+        # time.sleep(1)
 
         # See if a watchdog is running
         if self.__watchdog:
@@ -389,6 +398,7 @@ class AppCoreManager(AppCoreModuleBase):
             task_stop_dict=_manager.dict(),
             task_restart_dict=_manager.dict(),
             stop_event=_manager.Event(),
+            shutdown_event=_manager.Event(),
             interval_event=_manager.Event(),
             log_level=self._log_level,
             log_file=self._log_file,

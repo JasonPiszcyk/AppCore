@@ -347,6 +347,9 @@ class Task(AppCoreModuleBase):
             f"Multiprocessing Start Method: {str(get_start_method())}"
         )
         self.logger.debug(
+            f"Context Start Method: {str(self.__context.get_start_method())}"
+        )
+        self.logger.debug(
             f"Start: Start task: {self.name} (Type={self.__task_type})"
         )
 
