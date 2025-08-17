@@ -5,7 +5,9 @@
 __Version 1.0.5__
 * Expose Manager Watchdog so it can be used by top level process
 * Watchdog shutdown event add to synch shutdown process
+* ZMQ Interface added for comms
 
+`
 __Version 1.0.4__
 * Watchdog shutdown stops all registered tasks
 
