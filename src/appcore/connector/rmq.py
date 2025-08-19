@@ -30,6 +30,7 @@ along with this program (See file: COPYING). If not, see
 import pika
 import pika.channel
 import pika.frame
+import pika.spec
 import pika.adapters.blocking_connection
 from pika.exchange_type import ExchangeType
 import ssl
@@ -59,6 +60,7 @@ from typing import Callable
 # Constants
 #
 MAX_MSG_SIZE = 104857600
+PREFETCH_COUNT = 1
 
 #
 # Global Variables
@@ -176,8 +178,6 @@ class RMQInterface():
         self.message_handler = message_handler
 
 
-
-
     ###########################################################################
     #
     # Properties
@@ -208,21 +208,21 @@ class RMQInterface():
             None
 
         Raises:
-            AssertionError
-                When port is not int or str and not between 1 and 65535
-                When message handler is not a callable
+            None
         '''
         self.__use_select_connection = use_select
 
         self.connect()
 
         if self.__use_select_connection:
-            self.__connection.ioloop.start()
+            if isinstance(self.__connection, pika.SelectConnection):
+                self.__connection.ioloop.start()
         else:
-            self.open_channel()
-            self.setup_exchange()
-            self.setup_queue()
-            self.start_consuming()
+            if isinstance(self.__connection, pika.BlockingConnection):
+                self.open_channel()
+                self.setup_exchange()
+                self.setup_queue()
+                self.start_consuming()
 
 
     #
@@ -232,10 +232,13 @@ class RMQInterface():
         '''
         Stop and shutdown the connection to RabbitMQ
 
-        Parameters:
+        Args:
             None
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
         if not self.__closing:
@@ -244,154 +247,8 @@ class RMQInterface():
                 self.stop_consuming()
 
             if self.__use_select_connection: 
-                if self.__connection: self.__connection.ioloop.stop()
-
-
-    #
-    # send
-    #
-    def send(self, msg_frame=None, privkey_callback=None, enc_key=None):
-        '''
-        Send a message
-
-        Parameters:
-            msg_frame: An instance of the Rabbit_Frame class
-            private_key: The private key to use for signing
-            enc_key: Encryption key to encrypt the message
-
-        Return Value:
-            None
-        '''
-        if not msg_frame: raise RMQ_Error("Send: No message frame provided. Discarding")
-        if not self.queue:
-            raise RMQ_Error(f"Send: No queue identified for sending message (ID={msg_frame.message_id}). Discarding.")
-        
-        if not privkey_callback:
-            raise RMQ_Error(f"Send: No credentials provided to sign message (ID={msg_frame.message_id}). Discarding.")
-
-        self.__use_select_connection = False
-
-        # Sign the message
-        self.sign_message(msg_frame=msg_frame, privkey_callback=privkey_callback)
-
-        # Encrypt the message
-        self.encrypt_message(msg_frame=msg_frame, enc_key=enc_key)
-
-        # Send the message
-        self.connect()
-        self.open_channel()
-        self.setup_exchange()
-        self.setup_queue()
-
-        if not msg_frame.message_id: msg_frame.message_id = str(uuid.uuid4())
-        self.send_message(body=msg_frame.body, properties=msg_frame.to_message())
-        self.close_channel()
-        self.close_connection()
-
-
-    #
-    # send_keepalive
-    #
-    def send_keepalive(self):
-        '''
-        Send a keepalive message
-
-        Parameters:
-            None
-
-        Return Value:
-            None
-        '''
-        self.__use_select_connection = False
-
-        # Send the message
-        self.connect()
-        self.open_channel()
-        self.setup_exchange()
-        self.setup_queue()
-
-        _properties = pika.BasicProperties(
-            content_type='application/json',
-            type=rabbit_message.MCP_KEEPALIVE,
-            message_id=str(uuid.uuid4())
-        )
-
-        if self.__channel:
-            self.__channel.basic_publish(exchange=self._exchange, routing_key=self._routing_key,
-                body=rabbit_message.MCP_KEEPALIVE, properties=_properties)
-
-        self.close_channel()
-        self.close_connection()
-
-
-    #
-    # receive
-    #
-    def receive(self, timeout=0, pubkey_callback=None, enc_key=None):
-        '''
-        Receive a single message
-
-        Parameters:
-            timeout: Number of seconds to wait for a message before giving up
-            pubkey_callback: Function to look up the public key
-            enc_key: Encryption key to decrypt the message
-
-        Return Value:
-            object: An instance of the message frame class
-        '''
-        if not pubkey_callback: return None
-
-        self.__msg_frame = None
-
-        # Set up signal handler for an alarm to create the timeout
-        def timeout_handler(signum, frame):
-            raise RMQ_Timeout("Timeout")
-
-        signal.signal(signal.SIGALRM, timeout_handler)
-
-
-        # Callback to process a message when it arrives
-        def message_from_remote(channel, method, properties, body, rmq=self, pubkey_callback=pubkey_callback, enc_key=enc_key):
-            ''' Message received from remote rabbit server  '''
-             # Disable the alarm as we have received a message
-            signal.alarm(0)
-
-            # Process the message
-            try:
-                # Get our message frame from the Rabbit MQ message body
-                rmq.__msg_frame = rmq.extract_message_frame(properties=properties, body=body)
-            
-                # Decrypt 
-                rmq.decrypt_message(msg_frame=rmq.__msg_frame, enc_key=enc_key)
-
-                # Verify the message signature
-                rmq.verify_message(msg_frame=rmq.__msg_frame, pubkey_callback=pubkey_callback)
-            except RMQ_Error as err:
-                rmq.ack_message(method.delivery_tag)
-                rmq.stop()
-                raise RMQ_Error(err)
-            except RMQ_Warning as err:
-                rmq.ack_message(method.delivery_tag)
-                rmq.stop()
-                raise RMQ_Warning(err)
-
-            # Close down the connection
-            # rmq.ack_message(method.delivery_tag)
-            rmq.stop()
-
-
-        # Set up the callback, and set an alarm
-        self.on_message_callback = message_from_remote
-        signal.alarm(timeout)
-
-        # Wait for the reply message
-        try:
-            self.listen(use_select=True)
-        except RMQ_Timeout:
-            # Timed out waiting for a message
-            self.stop()
-
-        return self.__msg_frame
+                if isinstance(self.__connection, pika.SelectConnection):
+                    self.__connection.ioloop.stop()
 
 
     ###########################################################################
@@ -811,10 +668,6 @@ class RMQInterface():
     # Queue Handling
     #
     ###########################################################################
-#
-# FIX BELOW
-#
-
     #
     # setup_queue
     #
@@ -822,10 +675,13 @@ class RMQInterface():
         '''
         Declare a queue
 
-        Parameters:
+        Args:
             None
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
         def setup_queue_callback(frame):
@@ -842,15 +698,24 @@ class RMQInterface():
 
         _queue_res = None
 
-        if self._use_select_connection:
+        if self.__use_select_connection:
             if self.queue_ttl > 0:
-                if self.__channel:
-                    _queue_res = self.__channel.queue_declare(queue=self.queue, durable=False, auto_delete=True,
-                            arguments=_declare_args, callback=setup_queue_callback)
+                if isinstance(self.__channel, pika.channel.Channel): 
+                    _queue_res = self.__channel.queue_declare(
+                        queue=self.queue,
+                        durable=False,
+                        auto_delete=True,
+                        arguments=_declare_args,
+                        callback=setup_queue_callback
+                    )
             else:
-                if self.__channel: 
-                    _queue_res = self.__channel.queue_declare(queue=self.queue, durable=True, arguments=_declare_args, 
-                            callback=setup_queue_callback)
+                if isinstance(self.__channel, pika.channel.Channel): 
+                    _queue_res = self.__channel.queue_declare(
+                        queue=self.queue,
+                        durable=True,
+                        arguments=_declare_args, 
+                        callback=setup_queue_callback
+                    )
             
             if _queue_res and _queue_res.method:
                 self.queue_message_count = _queue_res.method.message_count
@@ -858,17 +723,30 @@ class RMQInterface():
         else:
             if self.queue_ttl > 0:
                 if self.__channel:
-                    _queue_res = self.__channel.queue_declare(queue=self.queue, durable=False, auto_delete=True,
-                            arguments=_declare_args)
+                    _queue_res = self.__channel.queue_declare(
+                        queue=self.queue,
+                        durable=False,
+                        auto_delete=True,
+                        arguments=_declare_args
+                    )
             else:
                 if self.__channel:
-                    _queue_res = self.__channel.queue_declare(queue=self.queue, durable=True, arguments=_declare_args)
+                    _queue_res = self.__channel.queue_declare(
+                        queue=self.queue,
+                        durable=True,
+                        arguments=_declare_args
+                    )
 
             if _queue_res and _queue_res.method:
                 self.queue_message_count = _queue_res.method.message_count
 
-            if self._exchange:
-                if self.__channel: self.__channel.queue_bind(self.queue, self._exchange, routing_key=self._routing_key)
+            if self.__exchange:
+                if isinstance(self.__channel, pika.channel.Channel):
+                    self.__channel.queue_bind(
+                        self.queue,
+                        self.__exchange,
+                        routing_key=self.__routing_key
+                    )
 
             self.set_qos()
 
@@ -876,23 +754,38 @@ class RMQInterface():
     #
     # on_queue_declareok
     #
-    def on_queue_declareok(self, frame):
+    def on_queue_declareok(
+            self,
+            frame: pika.frame.Frame
+    ):
         '''
         Queue declared OK callback
 
         Parameters:
-            frame: (Unused) queue.DeclareOk response frame
-            userdata: Extra user data (queue name)
+            frame: (Frame) queue.DeclareOk response frame
 
-        Return Value:
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
             None
         '''
-        def bind_callback(frame):
-            self.on_bindok(frame)
+        # Ignore frame - Unused
+        del frame
 
-        if self._exchange:
-            if self.__channel: self.__channel.queue_bind(self.queue, self._exchange, routing_key=self._routing_key,
-                    callback=bind_callback)
+        def bind_callback(cb_frame):
+            self.on_bindok(cb_frame)
+
+        if self.__exchange:
+            if isinstance(self.__channel, pika.channel.Channel): 
+                self.__channel.queue_bind(
+                    self.queue, self.__exchange,
+                    routing_key=self.__routing_key,
+                    callback=bind_callback
+                )
         else:
             self.set_qos()
 
@@ -900,16 +793,25 @@ class RMQInterface():
     #
     # on_bindok
     #
-    def on_bindok(self, frame):
+    def on_bindok(
+            self,
+            frame: pika.frame.Frame
+    ):
         '''
         Callback for when Bind is successful
 
-        Parameters:
-            frame: (Unused) Queue.BindOk response frame
+        Args:
+            frame: (Frame) Queue.BindOk Response frame
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
+        # Ignore frame - Unused
+        del frame
+
         self.set_qos()
 
 
@@ -920,31 +822,48 @@ class RMQInterface():
         '''
         Set QOS for a queue
 
-        Parameters:
+        Args:
             None
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
-        if self._use_select_connection:
-            if self.__channel: self.__channel.basic_qos(prefetch_count=self._prefetch_count, callback=self.on_basic_qos_ok)
+        if self.__use_select_connection:
+            if isinstance(self.__channel, pika.channel.Channel):
+                self.__channel.basic_qos(
+                    prefetch_count=PREFETCH_COUNT,
+                    callback=self.on_basic_qos_ok
+                )
         else:
-            if self.__channel: self.__channel.basic_qos(prefetch_count=self._prefetch_count)
+            if self.__channel: 
+                self.__channel.basic_qos(prefetch_count=PREFETCH_COUNT)
 
 
     #
     # on_bindok
     #
-    def on_basic_qos_ok(self, frame):
+    def on_basic_qos_ok(
+            self,
+            frame: pika.frame.Frame
+    ):
         '''
         Callback for when setting of QOS is successful
 
-        Parameters:
-            frame: (Unused) Queue.BindOk response frame
+        Args:
+            frame: (Frame) Queue.BindOk Response frame
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
+        # Ignore frame - Unused
+        del frame
+
         self.start_consuming()
 
 
@@ -960,21 +879,36 @@ class RMQInterface():
         '''
         Looping function to consume messages...
 
-        Parameters:
+        Args:
             None
 
-        Return Value:
+        Returns:
             None
-        '''
+
+        Raises:
+            AssertionError:
+                when message_handler is not callable
+       '''
+        assert callable(self.message_handler), \
+            "message_handler must be callable"
+
         if not self.__channel: return
 
-        if self._use_select_connection:
+        if self.__use_select_connection:
             self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
-        self._consumer_tag = self.__channel.basic_consume(self.queue, self.on_message_callback)
-        self._consuming = True
+        self.__consumer_tag = self.__channel.basic_consume(
+            self.queue,
+            on_message_callback = self.message_handler
+        )
+        self.__consuming = True
 
-        if not self._use_select_connection: self.__channel.start_consuming()
+        if not self.__use_select_connection:
+            if isinstance(
+                    self.__channel,
+                    pika.adapters.blocking_connection.BlockingChannel
+            ):
+                self.__channel.start_consuming()
 
 
     #
@@ -984,62 +918,102 @@ class RMQInterface():
         '''
         Stop consuming messages (end start_consuming loop)
 
-        Parameters:
+        Args:
             None
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
-        if self.__channel:
+        if isinstance(self.__channel, pika.channel.Channel):
             def cancel_callback(frame):
                 self.on_cancelok(frame)
 
-        self.__channel.basic_cancel(self._consumer_tag, cancel_callback)
+            self.__channel.basic_cancel(
+                self.__consumer_tag,
+                callback=cancel_callback
+            )
+
+        elif isinstance(
+            self.__channel,
+            pika.adapters.blocking_connection.BlockingChannel
+        ):
+            self.__channel.basic_cancel(self.__consumer_tag)
 
 
     #
     # on_consumer_cancelled
     #
-    def on_consumer_cancelled(self, method_frame):
+    def on_consumer_cancelled(
+            self,
+            frame: pika.frame.Frame
+    ):
         '''
         When RabbitMQ sends a Basic.Cancel for a consumer
 
-        Parameters:
-            method_frame: The Basic.Cancel frame
+        Args:
+            frame (Frame): The Basic.Cancel frame
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
+        # Ignore frame - Unused
+        del frame
+
         if self.__channel:
             self.__channel.close()
 
 
-    def on_cancelok(self, frame):
+    #
+    # on_cancelok
+    #
+    def on_cancelok(
+            self,
+            frame: pika.frame.Frame
+    ):
         '''
         When RabbitMQ acknowledges channel cancellation
 
-        Parameters:
-            frame: The Basic.CancelOk frame
+        Args:
+            frame (Frame): The Basic.CancelOk frame
 
-        Return Value:
+        Returns:
+            None
+
+        Raises:
             None
         '''
-        self._consuming = False
+        # Ignore frame - Unused
+        del frame
+
+        self.__consuming = False
         self.close_channel()
 
 
     #
     # ack_message
     #
-    def ack_message(self, delivery_tag=0):
+    def ack_message(
+            self,
+            delivery_tag: int = 0
+    ):
         '''
         Acknowledge a message has been processed
 
-        Parameters:
-            delivery_tag: delivery_tag of the message to acknowledge
-        
-        Return Value:
+        Args:
+            delivery_tag (int): delivery_tag of the message to acknowledge
+
+        Returns:
             None
+
+        Raises:
+            None
+        
         '''
         if not self.__channel: return
         if delivery_tag < 1: return
@@ -1051,21 +1025,31 @@ class RMQInterface():
     #
     # nack_message
     #
-    def nack_message(self, delivery_tag=0):
+    def nack_message(
+            self,
+            delivery_tag: int = 0
+    ):
         '''
         Reject/Requeu a message due to a transient processing failure
 
-        Parameters:
-            delivery_tag: delivery_tag of the message to reject
-        
-        Return Value:
+        Args:
+            delivery_tag (int): delivery_tag of the message to reject
+
+        Returns:
+            None
+
+        Raises:
             None
         '''
         if not self.__channel: return
         if delivery_tag < 1: return
 
         if self.__channel.is_open:
-            self.__channel.basic_nack(delivery_tag=delivery_tag, multiple=False, requeue=True)
+            self.__channel.basic_nack(
+                delivery_tag=delivery_tag,
+                multiple=False,
+                requeue=True
+            )
     
 
     ###########################################################################
@@ -1076,156 +1060,33 @@ class RMQInterface():
     #
     # send_message
     #
-    def send_message(self, body="", properties=None):
+    def send_message(
+            self,
+            body: bytes = b"",
+            properties: pika.spec.BasicProperties| None = None
+    ):
         '''
         Send a message
 
         Parameters:
-            body: The message body
-            properties: The properties for the message
+            body (bytes): The message body
+            properties (BasicProperties): The properties for the message
 
         Return Value:
             None
         '''
         # Make sure the message size isn't too big!
         if sys.getsizeof(body) > MAX_MSG_SIZE:
-            raise RMQ_Error("Message is too large")
+            raise exception.RMQMessageSizeError("Message is too large")
 
         # Send it
-        if self.__channel: self.__channel.basic_publish(exchange=self._exchange, routing_key=self._routing_key,
-            body=body, properties=properties)
-
-
-    ###########################################################################
-    #
-    # Message Processing - Message Format
-    #
-    ###########################################################################
-    #
-    # extract_message_frame
-    #
-    def extract_message_frame(self, properties=None, body=None):
-        '''
-        Extract the message frame from the body
-
-        Parameters:
-            properties: The message properties
-            body: The message body
-
-        Return Value:
-            object: An instance of the message frame class
-        '''
-        # Import the message frame into our class
-        msg_frame = rabbit_frame.Rabbit_Frame()
-        if not msg_frame.from_message(properties=properties, body=body):
-            raise RMQ_Warning(f"Message frame invalid (ID={properties.message_id}). Discarding.")
-        
-        return msg_frame
-
-
-    ###########################################################################
-    #
-    # Message Processing - Encryption/Signing
-    #
-    ###########################################################################
-    #
-    # encrypt_message
-    #
-    def encrypt_message(self, msg_frame=None, enc_key=None):
-        '''
-        Encrypt a message
-
-        Parameters:
-            msg_frame: An instance of the message frame class
-            queue: Queue the message will be sent on
-            enc_key: The encryption key
-
-        Return Value:
-            None (Message in frame is encrypted in place)
-        '''
-        # Encrypt the message
-        if not msg_frame.encrypt(key=enc_key):
-            raise RMQ_Warning(f"Unable to encrypt message.  Unable to process the message (ID={msg_frame.message_id}). Discarding.")
-
-
-    #
-    # decrypt_message
-    #
-    def decrypt_message(self, msg_frame=None, enc_key=None):
-        '''
-        Decrypt a message - If not encrypted, will leave the message alone
-
-        Parameters:
-            msg_frame: An instance of the message frame class
-            queue: Queue the message arrive on
-            enc_key: The encryption key for decryption
-
-        Return Value:
-            None (Message in frame is unencrypted in place)
-        '''
-        if not enc_key and msg_frame.encrypted:
-            raise RMQ_Warning(f"No key provided, message is encrypted. Unable to process the message (ID={msg_frame.message_id}). Discarding.")
-
-        if not msg_frame.decrypt(key=enc_key):
-            raise RMQ_Warning(f"Unable to decrypt message (ID={msg_frame.message_id}). Discarding.")
-
-
-    #
-    # sign_message
-    #
-    def sign_message(self, msg_frame=None, privkey_callback=None):
-        '''
-        Create the message signature
-
-        Parameters:
-            msg_frame: An instance of the message frame class
-            privkey_callback: Callback to get the private key from the datastore
-
-        Return Value:
-            None
-        '''
-        if not msg_frame: raise RMQ_Warning(f"Sign Message: No message provided.")
-        
-        if not self.me:
-            raise RMQ_Warning(f"Sign Message: Unable to determine IAS Appliance ID (ID={msg_frame.message_id}). Discarding.")
-
-        if not privkey_callback:
-            raise RMQ_Warning(f"Unable to determine signing credentials (ID={msg_frame.message_id}). Discarding.")
-
-        msg_frame.sender = self.me
-        _private_key = privkey_callback(appliance_id=msg_frame.sender, is_private_key=True)
-        if not _private_key:
-            raise RMQ_Warning(f"Unable to retreive signing credentials (ID={msg_frame.message_id}). Discarding.")
-
-        # Sign the message
-        if not msg_frame.sign(private_key=_private_key):
-            raise RMQ_Warning(f"Unable to sign message (ID={msg_frame.message_id}). Discarding.")
-
-
-    #
-    # verify_message
-    #
-    def verify_message(self, msg_frame=None, pubkey_callback=None):
-        '''
-        Verify the message signature
-
-        Parameters:
-            msg_frame: An instance of the message frame class
-            public_key: The public key of the sender to use to verify the signature
-
-        Return Value:
-            None
-        '''
-        if not pubkey_callback:
-            raise RMQ_Warning(f"Unable to verify message sender (ID={msg_frame.message_id}). Discarding.")
-
-        _public_key = pubkey_callback(appliance_id=msg_frame.sender, is_private_key=False)
-        if not _public_key: 
-            raise RMQ_Warning(f"Unable to verify message sender (ID={msg_frame.message_id}). Discarding.")
-
-        # Verify the signature
-        if not msg_frame.verify(public_key=_public_key):
-            raise RMQ_Warning(f"Unable to verify message (ID={msg_frame.message_id}). Discarding.")
+        if self.__channel:
+            self.__channel.basic_publish(
+                exchange=self.__exchange,
+                routing_key=self.__routing_key,
+                body=body,
+                properties=properties
+            )
 
 
 ###########################################################################

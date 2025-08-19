@@ -63,6 +63,11 @@ class RMQConnectionError(Exception):
     pass
 
 
+class RMQMessageSizeError(Exception):
+    ''' The message is too big to be sent '''
+    pass
+
+
 class ZMQClientNotConfiguredError(Exception):
     ''' ZMQ Client has not been configured '''
     pass
