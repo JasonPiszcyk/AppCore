@@ -2,6 +2,11 @@
 ## Release Notes
 
 
+__Version 1.0.6__
+Released: 2025-08-21
+* RMQ Interface added for comms
+
+
 __Version 1.0.5__
 * Expose Manager Watchdog so it can be used by top level process
 * Watchdog shutdown event add to synch shutdown process
