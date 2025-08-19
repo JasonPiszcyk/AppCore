@@ -74,6 +74,16 @@ class TaskQueue(AppCoreModuleBase):
     and a mechanisim to provide a query/response server model
 
     Attributes:
+        message_handler (Callable): Function to run to proces a message.
+            The message handler should accept 1 parameter:
+                frame - An instance of MessageFrame
+            The message handler can return a response.  This will be
+            place on the queue specified as 'response_queue' in the frame
+            properties.
+        keepalive_interval (int): If > 0, the listener will block for this
+            number of seconds.  If a message is not received within this
+            interval the exception 'MultiTaskingQueueKeepaliveIntervalExceeded'
+            will be raised
         listener_running (bool) [ReadOnly]: Indicates if the listener is
             currently running in this process/thread.
     '''
@@ -86,6 +96,7 @@ class TaskQueue(AppCoreModuleBase):
             *args,
             queue: queue.Queue | None = None,
             message_handler: Callable | None = None,
+            keepalive_interval: int = 0,
             stop_event: EventType | None = None,
             **kwargs
     ):
@@ -102,6 +113,10 @@ class TaskQueue(AppCoreModuleBase):
                 The message handler can return a response.  This will be
                 place on the queue specified as 'response_queue' in the frame
                 properties.
+            keepalive_interval (int): If > 0, the listener will block for this
+                number of seconds.  If a message is not received within this
+                interval the exception
+                'MultiTaskingQueueKeepaliveIntervalExceeded' will be raised
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -130,12 +145,9 @@ class TaskQueue(AppCoreModuleBase):
 
         self.__stop_event: EventType = stop_event
 
-        if callable(message_handler):
-            self._message_handler: Callable | None = message_handler
-        else:
-            self._message_handler: Callable | None = None
-
         # Attributes
+        self.message_handler = message_handler
+        self.keepalive_interval = keepalive_interval
 
 
     ###########################################################################
@@ -414,8 +426,20 @@ class TaskQueue(AppCoreModuleBase):
 
         self.__listener_running = True
         while self.__listener_running:
+            _frame = None
+            _timeout = None
+            _keepalive_interval_exceeded = False
+
+            if isinstance(self.keepalive_interval, float) and \
+                    self.keepalive_interval > 0:
+                _timeout=self.keepalive_interval
+
             try:
-                _frame = self.get()
+                _frame = self.get(block=True, timeout=_timeout)
+
+            except queue.Empty:
+                # Timed out - Should have received a keepalive before this
+                _keepalive_interval_exceeded = True
 
             except exception.MultiTaskingQueueFrameExit:
                 # The exit message frame was received
@@ -426,14 +450,19 @@ class TaskQueue(AppCoreModuleBase):
                 # The message was an internal message type (ignore it)
                 continue
 
+            if _keepalive_interval_exceeded:
+                raise exception.MultiTaskingQueueKeepaliveIntervalExceeded(
+                    "No Keepalive message received withion interval"
+                )
+
             if not _frame:
                 raise exception.MultiTaskingQueueInvalidFormatError(
                     "Message did not contain a frame"
                 )
 
             # Process the data
-            if callable(self._message_handler):
-                _response = self._message_handler(_frame)
+            if callable(self.message_handler):
+                _response = self.message_handler(_frame)
 
                 # Is a response required?
                 if _frame.message_type == MessageType.QUERY:
@@ -499,7 +528,7 @@ class TaskQueue(AppCoreModuleBase):
         Raises:
             None
         '''
-        self.logger.debug(f"Respoding to Query")
+        self.logger.debug(f"Responding to Query")
         assert query_frame, "A query frame is required to create a response"
 
         if not isinstance(query_frame.response_queue, TaskQueue):

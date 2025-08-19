@@ -103,6 +103,11 @@ class MultiTaskingQueueSystemFrame(Exception):
     pass
 
 
+class MultiTaskingQueueKeepaliveIntervalExceeded(Exception):
+    ''' No keepalive message has been received within the interval '''
+    pass
+
+
 ###########################################################################
 #
 # In case this is run directly rather than imported...

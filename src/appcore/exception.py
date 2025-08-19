@@ -58,6 +58,11 @@ along with this program (See file: COPYING). If not, see
 # Exceptions
 #
 ###########################################################################
+class RMQConnectionError(Exception):
+    ''' Error establishing the RMQ connection '''
+    pass
+
+
 class ZMQClientNotConfiguredError(Exception):
     ''' ZMQ Client has not been configured '''
     pass
