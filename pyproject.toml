@@ -20,6 +20,8 @@ dependencies = [
   "urllib3",
   "pytest",
   "redis",
+  "zmq",
+  "pika",
   "crypto_tools @ git+https://github.com/JasonPiszcyk/CryptoTools",
 ]
 

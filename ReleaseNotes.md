@@ -2,8 +2,15 @@
 ## Release Notes
 
 
+__Version 1.0.7__
+Released: 2025-MM-DD
+* Fix - from_json option to import without container
+* Fix - Dependencies in pyproject.toml
+* New - Add conversion to/from base 64
+
+
 __Version 1.0.6__
-Released: 2025-08-21
+Released: 2025-08-20
 * RMQ Interface added for comms
 
 

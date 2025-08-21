@@ -29,6 +29,7 @@ along with this program (See file: COPYING). If not, see
 # System Modules
 import uuid
 import json
+import base64
 
 # Local app modules
 from appcore.typing import DataType
@@ -42,6 +43,18 @@ from typing import Any
 # Module variables/constants/types
 #
 ###########################################################################
+#
+# Types
+#
+
+#
+# Constants
+#
+ENCODE_METHOD = "utf-8"
+
+#
+# Global Variables
+#
 
 
 ###########################################################################
@@ -179,7 +192,7 @@ def to_json(
             When the data cannot be converted to JSON
     '''
     assert isinstance(skip_invalid, bool), "skip_invalid must be True or False"
-    if not data: return ""
+    # if isinstance(data, str) and not data: return ""
 
     # Wrap the data in a dict containing the value and type
     if container:
@@ -204,12 +217,18 @@ def to_json(
 #
 def from_json(
         data: str = "",
+        container: bool = True
 ) -> Any:
     '''
     Convert a JSON string to python data
 
     Args:
         data (str): The json data
+        container (bool): If true, the JSON export contains an outer layer:
+            {
+                "value": { The export values },
+                "type": "dictionary"
+            }
     
     Returns:
         Any: The data converted from the JSON string
@@ -220,21 +239,73 @@ def from_json(
         json.decoder.JSONDecodeError:
             When JSON conversion fails
     '''
-    _json_dict = json.loads(data)
+    _value_from_json = json.loads(data)
+
+    if not container:
+        return _value_from_json
 
     # Extract the value based on the type of the data
     _value = set_value(
-        data=_json_dict['value'],
-        type=DataType(_json_dict['type']),
+        data=_value_from_json['value'],
+        type=DataType(_value_from_json['type']),
         default=DataType.NONE
     )
 
     if _value == DataType.NONE:
         raise TypeError(
-            f"Data type not supported: {_json_dict['type']}"
+            f"Data type not supported: {_value_from_json['type']}"
         )
 
     return _value
+
+
+#
+# to_base64
+#
+def to_base64(
+        data: bytes = b"",
+) -> str:
+    '''
+    Convert data to base64.
+
+    Args:
+        data (bytes): The data to be converted
+
+    Returns:
+        str: The data encoded as a string
+
+    Raises:
+        AssertionError:
+            when data is not in byte format
+    '''
+    assert isinstance(data, bytes), "sdata must be in byte format"
+
+    _val = base64.standard_b64encode(data)
+    return _val.decode(ENCODE_METHOD)
+
+
+#
+# from_base64
+#
+def from_base64(
+        data: str = "",
+) -> bytes:
+    '''
+    Convert data from base64 to bytes.
+
+    Args:
+        data (str): The data to be converted
+
+    Returns:
+        bytes: The data decoded as bytes
+
+    Raises:
+        AssertionError:
+            when data is not in byte format
+    '''
+    assert isinstance(data, bytes), "sdata must be in byte format"
+
+    return base64.standard_b64decode(data)
 
 
 ###########################################################################

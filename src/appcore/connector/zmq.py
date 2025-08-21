@@ -33,7 +33,7 @@ from zmq.auth.thread import ThreadAuthenticator
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
-from appcore.conversion import set_value
+from appcore.conversion import ENCODE_METHOD, set_value
 import appcore.exception as exception
 
 # Imports for python variable type hints
@@ -56,7 +56,6 @@ from appcore.typing import DataType
 # Constants
 #
 SHUTDOWN_MESSAGE = "__SHUTDOWN_NOW__"
-ENCODE_METHOD = "utf-8"
 CLIENT_RESPONSE_TIMEOUT = 60
 
 #
@@ -109,7 +108,7 @@ class ZMQInterface(AppCoreModuleBase):
             client_key_name (str): Name of the client key to use for auth.  If
                 not specified auth is not used for the client
             control_addr (str): Address for the Control IPC Q
-            message_handler (Callable): Callble to handle each received
+            message_handler (Callable): Callable to handle each received
                 message.  Takes one parameter, the message of type 'bytes' and
                 returns a 'bytes' value to be sent as a reponse to the request
             **kwargs (Undef): Keyword arguments to be passed to the constructor
