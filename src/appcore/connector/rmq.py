@@ -35,9 +35,7 @@ import pika.adapters.blocking_connection
 from pika.exchange_type import ExchangeType
 import ssl
 import os.path
-import uuid
 import sys
-import signal
 
 # Local app modules
 import appcore.exception as exception
@@ -150,7 +148,7 @@ class RMQInterface():
         self.__exchange = exchange
         self.__routing_key = routing_key
 
-        if not isinstance(port, int) and port < 1 or port > 65535:
+        if not isinstance(port, int) or port < 1 or port > 65535:
             if self.__ca_cert and self.__cert_pub and self.__cert_key:
                 # Default to secure
                 self.__port = 5671
@@ -279,13 +277,13 @@ class RMQInterface():
                 When cert_pub file cannot be found
                 When cert_key file cannot be found
         '''
-        assert not isinstance(self.__username, str) and self.__username, \
+        assert isinstance(self.__username, str) and self.__username, \
             "username not supplied"
-        assert not isinstance(self.__password, str) and self.__password, \
+        assert isinstance(self.__password, str) and self.__password, \
             "password not supplied"
-        assert not isinstance(self.__host, str) and self.__host, \
+        assert isinstance(self.__host, str) and self.__host, \
             "Rabbit MQ host not supplied"
-        assert not isinstance(self.vhost, str) and self.vhost, \
+        assert isinstance(self.vhost, str) and self.vhost, \
             "vhost not supplied"
 
         # Set up credentials
