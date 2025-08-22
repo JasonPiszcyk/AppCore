@@ -39,7 +39,7 @@ from appcore.typing import TaskStatus
 from typing import Any
 from threading import Event as EventType
 from multiprocessing.managers import DictProxy
-from appcore.multitasking.task import TaskType
+from appcore.multitasking.task import Task as TaskType
 
 
 ###########################################################################
@@ -90,6 +90,7 @@ class Watchdog(AppCoreModuleBase):
             stop_event: EventType | None = None,
             shutdown_event: EventType | None = None,
             interval_event: EventType | None = None,
+            thread_only: bool = False,
             **kwargs
     ):
         '''
@@ -108,6 +109,9 @@ class Watchdog(AppCoreModuleBase):
                 has finished shutting down 
             interval_event (Event): A SyncManager event to signal the watchdog
                 to skip waiting during the interval
+            thread_only (bool): If True, use local dicts to store task info
+                (rather than SyncManager dicts).  Allows for greater
+                flexibility in task arguments
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -115,14 +119,18 @@ class Watchdog(AppCoreModuleBase):
             None
 
         Raises:
-            None
+            AssertionError:
+                when not thread_only and task_start_dict is not a SyncManager
+                    dict
+                when not thread_only and task_stop_dict is not a SyncManager
+                    dict
+                when not thread_only and task_restart_dict is not a SyncManager
+                    dict
+                when a stop event is not provided
+                when a shutdown event is not provided
+                when an interval event is not provided
         '''
-        assert isinstance(task_start_dict, DictProxy), \
-            f"A SyncManager dict is required to store tasks to be started"
-        assert isinstance(task_stop_dict, DictProxy), \
-            f"A SyncManager dict is required to store tasks to be stopped"
-        assert isinstance(task_restart_dict, DictProxy), \
-            f"A SyncManager dict is required to store tasks to be restarted"
+
         assert stop_event, "An event is required to stop the watchdog"
         assert shutdown_event, "An event is required to sync watchdog shutdown"
         assert interval_event, "An event is required manage watchdog intervals"
@@ -130,9 +138,23 @@ class Watchdog(AppCoreModuleBase):
         super().__init__(*args, **kwargs)
 
         # Private Attributes
-        self.__task_start_dict = task_start_dict
-        self.__task_stop_dict = task_stop_dict
-        self.__task_restart_dict = task_restart_dict
+        if thread_only:
+            self.__task_start_dict = {}
+            self.__task_stop_dict = {}
+            self.__task_restart_dict = {}
+        else:
+            assert isinstance(task_start_dict, DictProxy), \
+                f"A SyncManager dict is required to store tasks to be started"
+            assert isinstance(task_stop_dict, DictProxy), \
+                f"A SyncManager dict is required to store tasks to be stopped"
+            assert isinstance(task_restart_dict, DictProxy), \
+                f"A SyncManager dict is required for tasks to be restarted"
+
+            self.__task_start_dict = task_start_dict
+            self.__task_stop_dict = task_stop_dict
+            self.__task_restart_dict = task_restart_dict
+
+        self.__thread_only = thread_only
         self.__stop_event = stop_event
         self.__shutdown_event = shutdown_event
         self.__interval_event = interval_event
@@ -182,7 +204,7 @@ class Watchdog(AppCoreModuleBase):
                 #
                 # Tasks to be stopped
                 #
-                _task_list = self.__task_stop_dict.keys()
+                _task_list = list(self.__task_stop_dict.keys())
                 for _key in _task_list:
                     _task: TaskType = self.__task_stop_dict[_key]
                     self.logger.info(
@@ -203,7 +225,7 @@ class Watchdog(AppCoreModuleBase):
                 #
                 # Tasks to be started
                 #
-                _task_list = self.__task_start_dict.keys()
+                _task_list = list(self.__task_start_dict.keys())
                 for _key in _task_list:
                     _task: TaskType = self.__task_start_dict[_key]
                     self.logger.info(
@@ -218,7 +240,7 @@ class Watchdog(AppCoreModuleBase):
                 #
                 # Tasks to be watched and restarted if necessary
                 #
-                _task_list = self.__task_restart_dict.keys()
+                _task_list = list(self.__task_restart_dict.keys())
                 for _key in _task_list:
                     _task: TaskType = self.__task_restart_dict[_key]
 
@@ -260,21 +282,21 @@ class Watchdog(AppCoreModuleBase):
         # Set all tasks to be stopped
         self.logger.debug("Stopping registered tasks")
 
-        _task_list = self.__task_start_dict.keys()
+        _task_list = list(self.__task_start_dict.keys())
         for _key in _task_list:
             _task: TaskType = self.__task_start_dict[_key]
             self.logger.debug(f"Setting stop (start): {_task.name}")
             self.__task_stop_dict[_key] = _task
             del self.__task_start_dict[_key]
 
-        _task_list = self.__task_restart_dict.keys()
+        _task_list = list(self.__task_restart_dict.keys())
         for _key in _task_list:
             _task: TaskType = self.__task_restart_dict[_key]
             self.logger.debug(f"Setting stop (restart): {_task.name}")
             self.__task_stop_dict[_key] = _task
             del self.__task_restart_dict[_key]
 
-        _task_list = self.__task_stop_dict.keys()
+        _task_list = list(self.__task_stop_dict.keys())
         for _key in _task_list:
             _task: TaskType = self.__task_stop_dict[_key]
             self.logger.debug(f"Stopping: {_task.name}")
@@ -350,10 +372,16 @@ class Watchdog(AppCoreModuleBase):
             str: The label of the task in the watchdog
 
         Raises:
-            None
+            AssertionError:
+                when a task is not provied
         '''
-        assert task, "A task is required to register with the watchdog"
+        assert isinstance(task, TaskType), \
+            "A task is required to register with the watchdog"
         assert isinstance(label, str), "Label must be a string"
+
+        if self.__thread_only:
+            assert task.type == "thread", \
+                "Watchdog configured to only watch thread type tasks"
 
         # If the label is empty, generate a uuid as a label
         if not label: label = str(uuid.uuid4())

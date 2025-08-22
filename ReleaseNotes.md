@@ -8,6 +8,7 @@ Released: 2025-MM-DD
 * Fix - Dependencies in pyproject.toml
 * New - Add conversion to/from base 64
 * Fix - Assertions in RMQ interface
+* Add - thread_only option to Watchdog - Allow more complex datastructures (eg classes) in thread arguments
 
 
 __Version 1.0.6__

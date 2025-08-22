@@ -27,13 +27,12 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
-import time
 from multiprocessing import get_context
 import logging
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
-from appcore.multitasking.task import Task, TaskType
+from appcore.multitasking.task import Task
 from appcore.multitasking.watchdog import Watchdog as WatchdogClass
 from appcore.multitasking.task_queue import TaskQueue
 from appcore.datastore.local import DataStoreLocal
@@ -273,7 +272,7 @@ class AppCoreManager(AppCoreModuleBase):
             kwargs: KeywordDictType = {},
             stop_function: Callable | None = None,
             stop_kwargs: KeywordDictType = {},
-     ) -> TaskType:
+     ) -> Task:
         '''
         Create a thread based Task
 
@@ -286,7 +285,7 @@ class AppCoreManager(AppCoreModuleBase):
             stop_kwargs (dict): Arguments to pass the stop function
 
         Returns:
-            TaskType: The task created (as a thread based task)
+            Task: The task created (as a thread based task)
 
         Raises:
             None
@@ -325,7 +324,7 @@ class AppCoreManager(AppCoreModuleBase):
             kwargs: KeywordDictType = {},
             stop_function: Callable | None = None,
             stop_kwargs: KeywordDictType = {},
-     ) -> TaskType:
+     ) -> Task:
         '''
         Create a process based Task
 
@@ -338,7 +337,7 @@ class AppCoreManager(AppCoreModuleBase):
             stop_kwargs (dict): Arguments to pass the stop function
 
         Returns:
-            TaskType: The task created (as a process based task)
+            Task: The task created (as a process based task)
 
         Raises:
             None
@@ -372,7 +371,8 @@ class AppCoreManager(AppCoreModuleBase):
     #
     def Watchdog(
             self,
-            interval: float = 30.0
+            interval: float = 30.0,
+            thread_only: bool = False
     ) -> WatchdogClass:
         '''
         Create a watchdog to monitor tasks
@@ -380,6 +380,9 @@ class AppCoreManager(AppCoreModuleBase):
         Args:
             interval (float): How often the watchdog (in seconds) wakes up
                 and checks the tasks
+            thread_only (bool): If True, use local dicts to store task info
+                (rather than SyncManager dicts).  Allows for greater
+                flexibility in task arguments
 
         Returns:
             Watchdog: An instance of the Watchdog
@@ -393,17 +396,30 @@ class AppCoreManager(AppCoreModuleBase):
         # Also ensures the instance attributes __context and __manager are set
         _manager = self._get_manager()
 
-        _watchdog = WatchdogClass(
-            task_start_dict=_manager.dict(),
-            task_stop_dict=_manager.dict(),
-            task_restart_dict=_manager.dict(),
-            stop_event=_manager.Event(),
-            shutdown_event=_manager.Event(),
-            interval_event=_manager.Event(),
-            log_level=self._log_level,
-            log_file=self._log_file,
-            log_to_console=self.log_to_console
-        )
+        if thread_only:
+            _watchdog = WatchdogClass(
+                stop_event=_manager.Event(),
+                shutdown_event=_manager.Event(),
+                interval_event=_manager.Event(),
+                thread_only=True,
+                log_level=self._log_level,
+                log_file=self._log_file,
+                log_to_console=self.log_to_console
+            )
+
+        else:
+            _watchdog = WatchdogClass(
+                task_start_dict=_manager.dict(),
+                task_stop_dict=_manager.dict(),
+                task_restart_dict=_manager.dict(),
+                stop_event=_manager.Event(),
+                shutdown_event=_manager.Event(),
+                interval_event=_manager.Event(),
+                thread_only=False,
+                log_level=self._log_level,
+                log_file=self._log_file,
+                log_to_console=self.log_to_console
+            )
 
         _kwargs = {
             "interval": interval

@@ -57,7 +57,6 @@ from appcore.typing import KeywordDictType
 #
 # Types
 #
-type TaskType = Task
 type ContextType = SpawnContext | DefaultContext
 TaskTypeType = Literal["thread", "process"]
 
@@ -92,11 +91,12 @@ class Task(AppCoreModuleBase):
         stop_function (Callable): Function to run to stop the
             thread/process
         stop_kwargs (dict): Arguments to pass the stop function
-        is_alive (bool): Indicates if the task is alive
-        id (int): Id of the thread/process
-        task_id (str): The unique Task ID
-        status (str): The status of the task
-        results (TaskResults): The results of the class
+        type (str) [ReadOnly]: The task type. 'thread' or 'process'
+        is_alive (bool) [ReadOnly]: Indicates if the task is alive
+        id (int) [ReadOnly]: Id of the thread/process
+        task_id (str) [ReadOnly]: The unique Task ID
+        status (str) [ReadOnly]: The status of the task
+        results (TaskResults) [ReadOnly]: The results of the task
         task_action (str): String indicating the action Watchdog should take
             with the task
     '''
@@ -199,6 +199,15 @@ class Task(AppCoreModuleBase):
     # Properties
     #
     ###########################################################################
+    #
+    # type
+    #
+    @property
+    def type(self) -> str:
+        ''' Check if the process/thread is alive '''
+        return self.__task_type
+
+
     #
     # is_alive
     #

@@ -117,6 +117,47 @@ class Test_Watchdog():
         _watchdog.loop_stop()
 
 
+    def test_single_thread_thread_only(self, manager):
+        ''' Watch a single Thread '''
+
+        # Create the watchdog
+        _watchdog = manager.Watchdog(
+            interval=WATCHDOG_INTERVAL,
+            thread_only=True
+        )
+
+        # Add a task
+        _kwargs = {
+            "test_event": manager.Event()
+        }
+
+        _task = manager.Thread(
+            name = f"Watchdog - Single - Thread",
+            target = simple_event_target,
+            kwargs = _kwargs,
+            stop_function = simple_event_stop,
+            stop_kwargs = _kwargs,
+        )
+
+        assert _task.status == TaskStatus.NOT_STARTED.value
+
+        # Register the task
+        _task_label = _watchdog.register(_task)
+
+        # Let it run
+        time.sleep(0.5)
+        assert _task.status == TaskStatus.RUNNING.value
+        time.sleep(1)
+
+        # Remove the task
+        _watchdog.deregister(_task_label)
+        time.sleep(0.5)
+        assert _task.status == TaskStatus.COMPLETED.value
+
+        # Stop the watchdog
+        _watchdog.loop_stop()
+
+
     def test_single_process(self, manager):
         ''' Watch a single Thread '''
 

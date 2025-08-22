@@ -79,7 +79,7 @@ class RMQInterface():
     Attributes:
         vhost (str): vhost to use
         queue (str): Name of the queue to use for this connection
-        queue_ttl (int): If > 0, creat an ephemeral queue that will
+        queue_ttl (int): If > 0, create an ephemeral queue that will
             disappear after queue_ttl seconds
         message_handler (Callable): Function to run when message
             received in the listener
@@ -181,7 +181,13 @@ class RMQInterface():
     # Properties
     #
     ###########################################################################
-
+    #
+    # consuming
+    #
+    @property
+    def consuming(self) -> bool:
+        '''  '''
+        return self.__consuming
 
 
     ###########################################################################
@@ -194,7 +200,8 @@ class RMQInterface():
     #
     def listen(
             self,
-            use_select: bool = False):
+            use_select: bool = False
+    ):
         '''
         Set up the connection and start listening for messages
 
@@ -241,12 +248,13 @@ class RMQInterface():
         '''
         if not self.__closing:
             self.__closing = True
-            if self.__consuming:
-                self.stop_consuming()
 
-            if self.__use_select_connection: 
-                if isinstance(self.__connection, pika.SelectConnection):
-                    self.__connection.ioloop.stop()
+        if self.__consuming:
+            self.stop_consuming()
+
+        if self.__use_select_connection: 
+            if isinstance(self.__connection, pika.SelectConnection):
+                self.__connection.ioloop.stop()
 
 
     ###########################################################################

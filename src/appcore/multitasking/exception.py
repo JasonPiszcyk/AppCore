@@ -88,6 +88,11 @@ class TaskIsNotRunningError(Exception):
     pass
 
 
+class TaskIsNotThreadError(Exception):
+    ''' Task is not a thread '''
+    pass
+
+
 class MultiTaskingQueueInvalidFormatError(Exception):
     ''' Invalid format for queue message '''
     pass
