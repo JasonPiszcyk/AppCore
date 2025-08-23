@@ -36,6 +36,7 @@ from pika.exchange_type import ExchangeType
 import ssl
 import os.path
 import sys
+import functools
 
 # Local app modules
 import appcore.exception as exception
@@ -1025,7 +1026,16 @@ class RMQInterface():
         if delivery_tag < 1: return
 
         if self.__channel.is_open:
-            self.__channel.basic_ack(delivery_tag=delivery_tag)
+            if self.__use_select_connection:
+                if isinstance(self.__connection, pika.SelectConnection):
+                    self.__connection.ioloop.add_callback_threadsafe(
+                        functools.partial(
+                            self.__channel.basic_ack,
+                            delivery_tag=delivery_tag
+                        )
+                     )
+            else:
+                self.__channel.basic_ack(delivery_tag=delivery_tag)
     
 
     #
@@ -1051,11 +1061,22 @@ class RMQInterface():
         if delivery_tag < 1: return
 
         if self.__channel.is_open:
-            self.__channel.basic_nack(
-                delivery_tag=delivery_tag,
-                multiple=False,
-                requeue=True
-            )
+            if self.__use_select_connection:
+                if isinstance(self.__connection, pika.SelectConnection):
+                    self.__connection.ioloop.add_callback_threadsafe(
+                        functools.partial(
+                            self.__channel.basic_nack,
+                            delivery_tag=delivery_tag,
+                            multiple=False,
+                            requeue=True
+                        )
+                     )
+            else:
+                self.__channel.basic_nack(
+                    delivery_tag=delivery_tag,
+                    multiple=False,
+                    requeue=True
+                )
     
 
     ###########################################################################

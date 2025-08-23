@@ -10,6 +10,7 @@ Released: 2025-MM-DD
 * Fix - Assertions in RMQ interface
 * Add - thread_only option to Watchdog - Allow more complex datastructures (eg classes) in thread arguments
 * Fix - TaskQueue timeout now raises exceptions correctly
+* Fix - RMQ connector use threadsafe call for ACK/NACK
 
 
 __Version 1.0.6__
