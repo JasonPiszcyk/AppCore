@@ -318,10 +318,7 @@ class TaskQueue(AppCoreModuleBase):
         self.logger.debug(f"Getting Message")
 
         # Get a message from the queue
-        try:
-            _frame = self.__queue.get(block=block, timeout=timeout)
-        except queue.Empty:
-            return None
+        _frame = self.__queue.get(block=block, timeout=timeout)
 
         # Confirm the message is in the correct format
         if not isinstance(_frame, MessageFrame):
@@ -430,7 +427,7 @@ class TaskQueue(AppCoreModuleBase):
             _timeout = None
             _keepalive_interval_exceeded = False
 
-            if isinstance(self.keepalive_interval, float) and \
+            if isinstance(self.keepalive_interval, int) and \
                     self.keepalive_interval > 0:
                 _timeout=self.keepalive_interval
 

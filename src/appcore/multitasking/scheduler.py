@@ -468,7 +468,7 @@ class Scheduler(AppCoreModuleBase):
             _interval = 3600.0
 
             # Go through all of the jobs looking for jobs to be run
-            _sorted_job_list = sorted(self.__jobs.keys())
+            _sorted_job_list = sorted(list(self.__jobs.keys()))
 
             for _entry in _sorted_job_list:
                 self.logger.debug(f"Entry: {_entry}")
@@ -693,7 +693,7 @@ class Scheduler(AppCoreModuleBase):
 
         # We have to look through the list of jobs as the job name
         # includes a timestamp
-        _sorted_job_list = sorted(self.__jobs.keys())
+        _sorted_job_list = sorted(list(self.__jobs.keys()))
         for _entry in _sorted_job_list:
             # Extract the timestamp from the key
             _, _, _name_part = _entry.partition("__")

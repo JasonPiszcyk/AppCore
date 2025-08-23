@@ -278,7 +278,9 @@ def to_base64(
         AssertionError:
             when data is not in byte format
     '''
-    assert isinstance(data, bytes), "sdata must be in byte format"
+    if not data: return ""
+
+    assert isinstance(data, bytes), "data must be in byte format"
 
     _val = base64.standard_b64encode(data)
     return _val.decode(ENCODE_METHOD)
@@ -303,7 +305,9 @@ def from_base64(
         AssertionError:
             when data is not in byte format
     '''
-    assert isinstance(data, bytes), "sdata must be in byte format"
+    if not data: return b""
+
+    assert isinstance(data, bytes), "data must be in byte format"
 
     return base64.standard_b64decode(data)
 

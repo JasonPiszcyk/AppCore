@@ -350,7 +350,7 @@ class DataStoreLocal(DataStoreBaseClass):
         _export_data = {}
 
         # Transform the data to a straight dict
-        _key_list = sorted(self.__data.keys())
+        _key_list = sorted(list(self.__data.keys()))
 
         for _key in _key_list:
             # If dot names, handle the hierarchy

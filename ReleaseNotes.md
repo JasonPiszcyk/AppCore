@@ -9,6 +9,7 @@ Released: 2025-MM-DD
 * New - Add conversion to/from base 64
 * Fix - Assertions in RMQ interface
 * Add - thread_only option to Watchdog - Allow more complex datastructures (eg classes) in thread arguments
+* Fix - TaskQueue timeout now raises exceptions correctly
 
 
 __Version 1.0.6__
