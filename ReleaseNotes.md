@@ -3,7 +3,8 @@
 
 
 __Version 1.0.7__
-Released: 2025-MM-DD
+Released: 2025-08-26
+* New - Add Memfile utility
 * Fix - from_json option to import without container
 * Fix - Dependencies in pyproject.toml
 * New - Add conversion to/from base 64
