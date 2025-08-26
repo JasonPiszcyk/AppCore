@@ -462,6 +462,40 @@ class DataStoreINIFile(DataStoreBaseClass):
 
 
     #
+    # list
+    #
+    def list(
+            self,
+            section: str = ""
+    ) -> list:
+        '''
+        Return a list of keys in the datastore
+
+        Args:
+            section (str): If not provided, a list of sections is returned.
+                If  provided, all entries in the section are returned.
+
+        Returns:
+            list: The list of sections or items
+
+        Raises:
+            None
+        '''
+        self.__item_maintenance()
+        _config = self.__read_ini()
+ 
+        if not section:
+            # Return a list of sections
+           return list(_config.sections())
+
+        # Return list of entries in the section
+        if not _config.has_section(section):
+            return []
+
+        return list(_config.options(section))
+
+
+    #
     # delete_file
     #
     def delete_file(self ) -> None:
@@ -495,12 +529,19 @@ class DataStoreINIFile(DataStoreBaseClass):
     #
     # export_to_json
     #
-    def export_to_json(self) -> str:
+    def export_to_json(
+            self,
+            container: bool = True
+    ) -> str:
         '''
         Export the data store to JSON
 
         Args:
-            None
+            container (bool): If true, the export contains an outer layer:
+                {
+                    "value": { The export values },
+                    "type": "dictionary"
+                }
 
         Returns:
             str: The JSON string
@@ -513,7 +554,11 @@ class DataStoreINIFile(DataStoreBaseClass):
         _data = {s:dict(_config.items(s)) for s in _config.sections()}
 
         # Convert to JSON
-        return self._export_to_json(data=_data, skip_invalid=True)
+        return to_json(
+            data=_data,
+            skip_invalid=True,
+            container=container
+        )
 
 
 ###########################################################################

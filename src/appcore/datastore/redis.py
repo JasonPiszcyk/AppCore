@@ -232,7 +232,8 @@ class DataStoreRedis(DataStoreBaseClass):
             bool: True if the item exists, False otherwise
 
         Raises:
-            None
+            DataStoreRedisNotConnected
+                When not connected
         '''
         if not self.__redis:
             raise exception.DataStoreRedisNotConnected(
@@ -269,7 +270,8 @@ class DataStoreRedis(DataStoreBaseClass):
             Any: The value of the item
 
         Raises:
-            None
+            DataStoreRedisNotConnected
+                When not connected
         '''
         if not self.__redis:
             raise exception.DataStoreRedisNotConnected(
@@ -322,6 +324,8 @@ class DataStoreRedis(DataStoreBaseClass):
         Raises:
             AssertionError:
                 When timeout is not zero or a positive integer
+            DataStoreRedisNotConnected
+                When not connected
             DataStoreDotNameError:
                 When the dot name is a low part of a hierarchy
         '''
@@ -378,7 +382,8 @@ class DataStoreRedis(DataStoreBaseClass):
             Any: The value of the item
 
         Raises:
-            None
+            DataStoreRedisNotConnected
+                When not connected
         '''
         if not self.__redis:
             raise exception.DataStoreRedisNotConnected(
@@ -390,6 +395,49 @@ class DataStoreRedis(DataStoreBaseClass):
 
         # 'delete' should raise an exception if there is a problem
         self.__redis.delete(name)
+
+
+    #
+    # list
+    #
+    def list(
+            self,
+            prefix: str = ""
+    ) -> list:
+        '''
+        Return a list of keys in the datastore
+
+        Args:
+            prefix (str): Will try to match any keys beginning with this str.
+
+        Returns:
+            list: The list of items
+
+        Raises:
+            DataStoreRedisNotConnected
+                When not connected
+       '''
+        if not self.__redis:
+            raise exception.DataStoreRedisNotConnected(
+                "A connection has not been established to Redis"
+            )
+
+        self.__item_maintenance()
+
+        _key_list = []
+
+        _batch = self.__redis.scan_iter(
+            match=f"{prefix}*",
+            count=500
+        )
+        while _batch:
+            _key_list.extend(_batch)
+            _batch = self.__redis.scan_iter(
+                match=f"{prefix}*",
+                count=500
+            )
+
+        return _key_list
 
 
     ###########################################################################

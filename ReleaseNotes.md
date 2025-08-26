@@ -2,8 +2,13 @@
 ## Release Notes
 
 
+__Version 1.0.8__
+Released: 2025-MM-DD
+* New - Add list function to datastores
+
+
 __Version 1.0.7__
-Released: 2025-08-27
+Released: 2025-08-26
 * New - Add Memfile utility
 * Fix - from_json option to import without container
 * Fix - Dependencies in pyproject.toml

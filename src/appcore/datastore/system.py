@@ -319,6 +319,39 @@ class DataStoreSystem(DataStoreBaseClass):
         if self.has(name): del self.__data[name]
 
 
+    #
+    # list
+    #
+    def list(
+            self,
+            prefix: str = ""
+    ) -> list:
+        '''
+        Return a list of keys in the datastore
+
+        Args:
+            prefix (str): Will try to match any keys beginning with this str.
+
+        Returns:
+            list: The list of items
+
+        Raises:
+            None
+        '''
+        self.__item_maintenance()
+        _key_list = list(self.__data.keys())
+ 
+        if not prefix:
+            return _key_list
+        
+        _filtered_list = []
+        for _entry in _key_list:
+            if str(_entry).find(prefix, 0) == 0:
+                _filtered_list.append(_entry)
+
+        return _filtered_list
+
+
     ###########################################################################
     #
     # Export Functions
