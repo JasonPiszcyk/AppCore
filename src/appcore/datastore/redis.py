@@ -426,16 +426,8 @@ class DataStoreRedis(DataStoreBaseClass):
 
         _key_list = []
 
-        _batch = self.__redis.scan_iter(
-            match=f"{prefix}*",
-            count=500
-        )
-        while _batch:
-            _key_list.extend(_batch)
-            _batch = self.__redis.scan_iter(
-                match=f"{prefix}*",
-                count=500
-            )
+        for _key in self.__redis.scan_iter(match=f"{prefix}*"):
+            _key_list.append(_key)
 
         return _key_list
 
