@@ -148,9 +148,9 @@ def get_value_type(
     if isinstance(data, list): return DataType.LIST
     if isinstance(data, str): return DataType.STRING
     if isinstance(data, tuple): return DataType.TUPLE
+    if isinstance(data, bool): return DataType.BOOLEAN
     if isinstance(data, int): return DataType.INTEGER
     if isinstance(data, float): return DataType.FLOAT
-    if isinstance(data, bool): return DataType.BOOLEAN
 
     if data is None: return DataType.NONE
 
@@ -303,11 +303,11 @@ def from_base64(
 
     Raises:
         AssertionError:
-            when data is not in byte format
+            when data is not in string format
     '''
     if not data: return b""
 
-    assert isinstance(data, bytes), "data must be in byte format"
+    assert isinstance(data, str), "data must be in string format"
 
     return base64.standard_b64decode(data)
 

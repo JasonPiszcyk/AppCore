@@ -229,6 +229,7 @@ class MemFile():
 
             _, _enc_key = ct_fernet.derive_key(salt=_salt, password=password)
 
+
         _data = str(ct_fernet.decrypt(data=_enc_data, key=_enc_key))
 
         # Go to the start of our file so we overwrite it
@@ -238,7 +239,7 @@ class MemFile():
         self.text_fp.write(_data)
 
         # Reset to the start of the file so any reads will come from there
-        self.bin_fp.seek(0)
+        self.text_fp.seek(0)
 
         return True
 
