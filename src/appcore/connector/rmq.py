@@ -217,7 +217,7 @@ class RMQInterface():
         Raises:
             None
         '''
-        self._use_select_connection = False
+        self.__use_select_connection = False
 
         # Send the message
         self.connect()
@@ -1066,7 +1066,7 @@ class RMQInterface():
                             self.__channel.basic_ack,
                             delivery_tag=delivery_tag
                         )
-                     )
+                    )
             else:
                 self.__channel.basic_ack(delivery_tag=delivery_tag)
     
@@ -1103,7 +1103,7 @@ class RMQInterface():
                             multiple=False,
                             requeue=True
                         )
-                     )
+                    )
             else:
                 self.__channel.basic_nack(
                     delivery_tag=delivery_tag,

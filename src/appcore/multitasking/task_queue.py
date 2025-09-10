@@ -421,15 +421,15 @@ class TaskQueue(AppCoreModuleBase):
         # If the listener is already running, just return
         if self.__listener_running: return
 
+        _timeout = None
+        if isinstance(self.keepalive_interval, int) and \
+                self.keepalive_interval > 0:
+            _timeout=self.keepalive_interval
+
         self.__listener_running = True
         while self.__listener_running:
             _frame = None
-            _timeout = None
             _keepalive_interval_exceeded = False
-
-            if isinstance(self.keepalive_interval, int) and \
-                    self.keepalive_interval > 0:
-                _timeout=self.keepalive_interval
 
             try:
                 _frame = self.get(block=True, timeout=_timeout)
@@ -449,7 +449,7 @@ class TaskQueue(AppCoreModuleBase):
 
             if _keepalive_interval_exceeded:
                 raise exception.MultiTaskingQueueKeepaliveIntervalExceeded(
-                    "No Keepalive message received withion interval"
+                    "No Keepalive message received within interval"
                 )
 
             if not _frame:
@@ -459,11 +459,14 @@ class TaskQueue(AppCoreModuleBase):
 
             # Process the data
             if callable(self.message_handler):
+                # print(f"Calling Task Q Handler: >{_frame.data}<")
                 _response = self.message_handler(_frame)
+                # print("Task Q Handler Completed")
 
                 # Is a response required?
                 if _frame.message_type == MessageType.QUERY:
                     self.respond(response=_response, query_frame=_frame)
+
 
         # Set the stop event
         if self.__stop_event: self.__stop_event.set()
