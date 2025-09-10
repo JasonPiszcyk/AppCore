@@ -5,8 +5,9 @@
 __Version 1.0.8__
 Released: 2025-MM-DD
 * New - Add list function to datastores
-* Fix - Get datatype checks boolean before int (bool is subclass of int)
+* Fix - get_value_type checks boolean before int (bool is subclass of int)
 * Fix - Base64 Conversion now expects string to convert from base 64
+* New - Add Rabbit MQ 'send'
 
 
 __Version 1.0.7__

@@ -197,6 +197,39 @@ class RMQInterface():
     #
     ###########################################################################
     #
+    # send
+    #
+    def send(
+            self,
+            body: bytes = b"",
+            properties: pika.spec.BasicProperties| None = None
+    ):
+        '''
+        Send a message
+
+        Args:
+            body (bytes): The message body
+            properties (BasicProperties): The properties for the message
+
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        self._use_select_connection = False
+
+        # Send the message
+        self.connect()
+        self.open_channel()
+        self.setup_exchange()
+        self.setup_queue()
+        self.send_message(body=body, properties=properties)
+        self.close_channel()
+        self.close_connection()
+
+
+    #
     # listen
     #
     def listen(
@@ -1095,13 +1128,16 @@ class RMQInterface():
         '''
         Send a message
 
-        Parameters:
+        Args:
             body (bytes): The message body
             properties (BasicProperties): The properties for the message
 
-        Return Value:
+        Returns:
             None
-        '''
+
+        Raises:
+            None
+       '''
         # Make sure the message size isn't too big!
         if sys.getsizeof(body) > MAX_MSG_SIZE:
             raise exception.RMQMessageSizeError("Message is too large")
