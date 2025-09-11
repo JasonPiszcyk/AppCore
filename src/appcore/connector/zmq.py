@@ -91,6 +91,7 @@ class ZMQInterface(AppCoreModuleBase):
             client_key_name: str = "",
             control_addr: str = "",
             message_handler: Callable | None = None,
+            query_mode: bool = False,
             **kwargs
     ):
         '''
@@ -111,6 +112,8 @@ class ZMQInterface(AppCoreModuleBase):
             message_handler (Callable): Callable to handle each received
                 message.  Takes one parameter, the message of type 'bytes' and
                 returns a 'bytes' value to be sent as a reponse to the request
+            query_mode: If True, server will send return value from message
+                handler as a response.  If False, no reposnse is sent.
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -133,6 +136,7 @@ class ZMQInterface(AppCoreModuleBase):
         self.__control_addr = control_addr or "ipc:///tmp/_zmq-default-control"
         self.__message_handler = message_handler
         self.__client: SyncSocket | None = None
+        self.__query_mode = query_mode
 
         if self.__cert_dir and self.__server_key_name:
             self.__auth = True
@@ -229,7 +233,7 @@ class ZMQInterface(AppCoreModuleBase):
             if _receiver in _sockets and _sockets[_receiver] == zmq.POLLIN:
                 _msg = _receiver.recv()
                 _resp = self.__message_handler(_msg)
-                _receiver.send(_resp)
+                if self.__query_mode: _receiver.send(_resp)
 
         # Stop the ZMQ receiver
         if _auth: _auth.stop()
@@ -310,26 +314,30 @@ class ZMQInterface(AppCoreModuleBase):
 
 
     #
-    # request
+    # send
     #
-    def request(
+    def send(
             self,
             data: bytes = b""
-    ) -> bytes:
+    ):
         '''
-        Send a request to a ZMQ 'Client' 
+        Send a message to a ZMQ Server.
 
         Args:
             data: (bytes): The data to send
 
         Returns:
-            bytes - The response from the server
+            None
 
         Raises:
             ZMQClientNotConfiguredError:
                 When the ZMQ client is not configured
+            ZMQClientConnectionError:
+                When the connection fails
+            MessageFormatInvalidError
+                When the message data is not valid (eg str or bytes)
         '''
-        # Make sure the client has been configure
+        # Make sure the client has been configured
         if not self.__client:
             raise exception.ZMQClientNotConfiguredError(
                 "ZMQ client not configured"
@@ -345,6 +353,36 @@ class ZMQInterface(AppCoreModuleBase):
             )
 
         self.__client.send(_byte_data)
+
+
+    #
+    # request
+    #
+    def request(
+            self,
+            data: bytes = b""
+    ) -> bytes:
+        '''
+        Send a request to a ZMQ Server in 'Query_Mode'. This expects a
+        response to the request.
+
+        Args:
+            data: (bytes): The data to send
+
+        Returns:
+            bytes - The response from the server
+
+        Raises:
+            ZMQClientNotConfiguredError:
+                When the ZMQ client is not configured
+        '''
+        # Make sure the client has been configured
+        if not self.__client:
+            raise exception.ZMQClientNotConfiguredError(
+                "ZMQ client not configured"
+            )
+
+        self.send(data=data)
 
         if self.__client.poll(CLIENT_RESPONSE_TIMEOUT):
             _resp = self.__client.recv()

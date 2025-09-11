@@ -3,6 +3,11 @@
 
 
 __Version 1.0.8__
+Released: 2025-09-XX
+* New - Add 'send' function to ZMQ
+
+
+__Version 1.0.8__
 Released: 2025-09-10
 * New - Add list function to datastores
 * Fix - get_value_type checks boolean before int (bool is subclass of int)
