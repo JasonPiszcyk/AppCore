@@ -104,6 +104,7 @@ class RMQInterface():
             routing_key: str = "",
             queue: str = "",
             queue_ttl: int = 0,
+            use_select: bool = False,
             message_handler: Callable | None = None
     ):
         '''
@@ -128,6 +129,8 @@ class RMQInterface():
             queue (str): Name of the queue to use for this connection
             queue_ttl (int): If > 0, creat an ephemeral queue that will
                 disappear after queue_ttl seconds
+            use_select (bool): If True use a select connection, if False
+                use a blocking connection
             message_handler (Callable): Function to run when message
                 received in the listener
 
@@ -166,7 +169,7 @@ class RMQInterface():
         self.__channel:  pika.channel.Channel | \
             pika.adapters.blocking_connection.BlockingChannel | None = None
 
-        self.__use_select_connection = False
+        self.__use_select_connection = use_select
         self.__closing = False
         self.__consuming = False
 
@@ -232,16 +235,12 @@ class RMQInterface():
     #
     # listen
     #
-    def listen(
-            self,
-            use_select: bool = False
-    ):
+    def listen(self):
         '''
         Set up the connection and start listening for messages
 
         Args:
-            use_select (bool): True = Use Select Connection Adapter, False = 
-                Use Blocking Connection Adapter
+            None
 
         Returns:
             None
@@ -249,9 +248,9 @@ class RMQInterface():
         Raises:
             None
         '''
-        self.__use_select_connection = use_select
-
-        self.connect()
+        # Ensure the connection is open
+        if not self.__connection or not self.__connection.is_open:
+            self.connect()
 
         if self.__use_select_connection:
             if isinstance(self.__connection, pika.SelectConnection):

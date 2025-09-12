@@ -5,6 +5,9 @@
 __Version 1.0.8__
 Released: 2025-09-XX
 * New - Add 'send' function to ZMQ
+* Fix - Check connection state in RMQ before beginning 'listen'
+* Change - RMQ - Move 'use_select' to initiation instead of when starting listener
+* Fix - ZMQ Client Timeout
 
 
 __Version 1.0.8__

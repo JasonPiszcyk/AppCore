@@ -56,7 +56,7 @@ from appcore.typing import DataType
 # Constants
 #
 SHUTDOWN_MESSAGE = "__SHUTDOWN_NOW__"
-CLIENT_RESPONSE_TIMEOUT = 60
+CLIENT_RESPONSE_TIMEOUT = 60000
 
 #
 # Global Variables
