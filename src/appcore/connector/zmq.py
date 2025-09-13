@@ -56,7 +56,12 @@ from appcore.typing import DataType
 # Constants
 #
 SHUTDOWN_MESSAGE = "__SHUTDOWN_NOW__"
-CLIENT_RESPONSE_TIMEOUT = 60000
+CLIENT_RESPONSE_TIMEOUT = 30000
+
+# Internal Query type
+QUERY_MESSAGE = b"MESSAGE"
+QUERY_REQUEST = b"REQUEST"
+QUERY_RESPONSE = b"RESPONSE"
 
 #
 # Global Variables
@@ -75,7 +80,9 @@ class ZMQInterface(AppCoreModuleBase):
     Creates a ZMQ connection server or client
 
     Attributes:
-        None
+        message_handler (Callable): Callable to handle each received
+            message.  Takes two parameters - the client id and the message.
+            Returns a 'bytes' value
     '''
 
     #
@@ -91,7 +98,6 @@ class ZMQInterface(AppCoreModuleBase):
             client_key_name: str = "",
             control_addr: str = "",
             message_handler: Callable | None = None,
-            query_mode: bool = False,
             **kwargs
     ):
         '''
@@ -110,10 +116,8 @@ class ZMQInterface(AppCoreModuleBase):
                 not specified auth is not used for the client
             control_addr (str): Address for the Control IPC Q
             message_handler (Callable): Callable to handle each received
-                message.  Takes one parameter, the message of type 'bytes' and
-                returns a 'bytes' value to be sent as a reponse to the request
-            query_mode: If True, server will send return value from message
-                handler as a response.  If False, no reposnse is sent.
+                message.  Takes two parameters - the client id and the message.
+                Returns a 'bytes' value
             **kwargs (Undef): Keyword arguments to be passed to the constructor
                 of the inherited process
 
@@ -127,6 +131,7 @@ class ZMQInterface(AppCoreModuleBase):
 
         # Private Attributes
         self.__zmq = zmq.Context()
+        self.__thread_auth: ThreadAuthenticator | None = None
 
         self.__address = address
         self.__port = port
@@ -134,9 +139,9 @@ class ZMQInterface(AppCoreModuleBase):
         self.__server_key_name = server_key_name
         self.__client_key_name = client_key_name
         self.__control_addr = control_addr or "ipc:///tmp/_zmq-default-control"
-        self.__message_handler = message_handler
+        self.__control: SyncSocket | None = None
+        self.__server: SyncSocket | None = None
         self.__client: SyncSocket | None = None
-        self.__query_mode = query_mode
 
         if self.__cert_dir and self.__server_key_name:
             self.__auth = True
@@ -144,6 +149,7 @@ class ZMQInterface(AppCoreModuleBase):
             self.__auth = False 
 
         # Attributes
+        self.message_handler = message_handler
 
 
     ###########################################################################
@@ -186,37 +192,114 @@ class ZMQInterface(AppCoreModuleBase):
         if _port_int < 1 or _port_int > 65535:
             raise AssertionError("port must be between 1 and 65535")
 
-        assert callable(self.__message_handler), \
-            "A message handler callable must be provided"
-
         # Connect to control channel (to allow exit of server)
-        _control = self.__zmq.socket(zmq.PULL)
-        _control.connect(self.__control_addr)
+        self.__control = self.__zmq.socket(zmq.PULL)
+        self.__control.connect(self.__control_addr)
 
         # Configure the receiver
-        _receiver = self.__zmq.socket(zmq.REP)
+        self.__server = self.__zmq.socket(zmq.ROUTER)
 
         # If cert_dir is set, configure auth
-        _auth = None
         if self.__auth:
-            _auth = ThreadAuthenticator(self.__zmq, log=self.logger)
-            _auth.start()
+            self.__thread_auth = ThreadAuthenticator(
+                self.__zmq,
+                log=self.logger
+            )
+            self.__thread_auth.start()
             # auth.allow('127.0.0.1')
-            _auth.configure_curve(domain='*', location=self.__cert_dir)
+            self.__thread_auth.configure_curve(
+                domain='*',
+                location=self.__cert_dir
+            )
             _secret_key = f"{self.__cert_dir}/" + \
                     f"{self.__server_key_name}.key_secret"
             _public, _secret = zmq.auth.load_certificate(_secret_key)
-            _receiver.curve_secretkey = _secret # type: ignore
-            _receiver.curve_publickey = _public
-            _receiver.curve_server = True
+            self.__server.curve_secretkey = _secret # type: ignore
+            self.__server.curve_publickey = _public
+            self.__server.curve_server = True
 
         if not self.__address: self.__address = "*"
-        _receiver.bind(f"tcp://{self.__address}:{_port_int}")
+        self.__server.bind(f"tcp://{self.__address}:{_port_int}")
+
+
+    #
+    # response
+    #
+    def response(
+            self,
+            client_id: bytes = b"",
+            data: bytes = b"",
+    ):
+        '''
+        Send a response to a request.  The response is out of band to allow
+        the server to continue processing if the request was slow.
+
+        For ZMQ this is a response to a previous request
+
+        Args:
+            _client_id: (bytes): The client being responded to
+            data: (bytes): The data to send
+
+        Returns:
+            None
+
+        Raises:
+            ZMQServerNotConfiguredError:
+                When the ZMQ server is not configured
+         '''
+        # Make sure the server has been configured
+        if not self.__server:
+            raise exception.ZMQServerNotConfiguredError(
+                "ZMQ server not configured"
+            )
+
+        if not isinstance(client_id, bytes):
+            raise exception.MessageFormatInvalidError(
+                "Request ID must be in byte format"
+            )
+
+        if not isinstance(data, bytes):
+            raise exception.MessageFormatInvalidError(
+                "Message must be in byte format"
+            )
+
+        # Send the response
+        self.__server.send_multipart([client_id, data])
+
+
+    #
+    # listen
+    #
+    def listen(
+            self,
+            ) -> None:
+        '''
+        Begin listening for messages
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError
+                When port is not int or str and not between 1 and 65535
+                When message handler is not a callable
+        '''
+        # Make sure the server has been configured
+        if not self.__server or not self.__control:
+            raise exception.ZMQServerNotConfiguredError(
+                "ZMQ server not configured"
+            )
+
+        assert callable(self.message_handler), \
+            "A message handler callable must be provided"
 
         # Initialize poll set
         _poller = zmq.Poller()
-        _poller.register(_control, zmq.POLLIN)
-        _poller.register(_receiver, zmq.POLLIN)
+        _poller.register(self.__control, zmq.POLLIN)
+        _poller.register(self.__server, zmq.POLLIN)
 
         # Poll the ZMQ sockets and process info
         self.logger.debug("Starting ZMQ listening server")
@@ -224,26 +307,50 @@ class ZMQInterface(AppCoreModuleBase):
         _polling = True
         while _polling:
             _sockets = dict(_poller.poll())
-            if _control in _sockets and _sockets[_control] == zmq.POLLIN:
-                _msg = _control.recv_string()
+            if self.__control in _sockets and \
+                        _sockets[self.__control] == zmq.POLLIN:
+                _msg = self.__control.recv_string()
                 if _msg == SHUTDOWN_MESSAGE:
                     self.logger.debug("Shutdown message received")
                     _polling = False
 
-            if _receiver in _sockets and _sockets[_receiver] == zmq.POLLIN:
-                _msg = _receiver.recv()
-                _resp = self.__message_handler(_msg)
-                if self.__query_mode: _receiver.send(_resp)
+            if self.__server in _sockets and \
+                        _sockets[self.__server] == zmq.POLLIN:
+                _msg = self.__server.recv_multipart()
+                if len(_msg) != 4:
+                    self.logger.warning(
+                        "Server: Incorrect message format. Discarding"
+                    )
+                    continue
+
+                # Extract the message info (2nd entry is a null)
+                _client_id = _msg[0]
+                _msg_type = _msg[2]
+                _data = _msg[3]
+
+                if _msg_type == QUERY_MESSAGE:
+                    _resp = self.message_handler(b"", _data)
+                    self.__server.send_multipart([_client_id, _resp])
+                    continue
+
+                if _msg_type == QUERY_REQUEST:
+                    _ = self.message_handler(_client_id, _data)
+                    self.__server.send_multipart([_client_id, _client_id])
+                    continue
+
+                # Responses to QUERY_RESPONSE are sent out of band using the
+                # method 'response', so nothing to be done
+
 
         # Stop the ZMQ receiver
-        if _auth: _auth.stop()
+        if self.__thread_auth: self.__thread_auth.stop()
         self.logger.debug("ZMQ listening server stopped")
 
 
     #
-    # server_stop
+    # listen_stop
     #
-    def server_stop(self) -> None:
+    def listen_stop(self) -> None:
         '''
         Stop a ZMQ 'Server' to receive requests and respond
 
@@ -295,7 +402,7 @@ class ZMQInterface(AppCoreModuleBase):
             raise AssertionError("port must be between 1 and 65535")
 
         # Configure the client
-        self.__client = self.__zmq.socket(zmq.REQ)
+        self.__client = self.__zmq.socket(zmq.DEALER)
 
         if self.__auth:
             _client_key = f"{self.__cert_dir}/" + \
@@ -319,7 +426,7 @@ class ZMQInterface(AppCoreModuleBase):
     def send(
             self,
             data: bytes = b""
-    ):
+    ) -> bytes:
         '''
         Send a message to a ZMQ Server.
 
@@ -327,7 +434,7 @@ class ZMQInterface(AppCoreModuleBase):
             data: (bytes): The data to send
 
         Returns:
-            None
+            bytes - The response from the server
 
         Raises:
             ZMQClientNotConfiguredError:
@@ -335,7 +442,7 @@ class ZMQInterface(AppCoreModuleBase):
             ZMQClientConnectionError:
                 When the connection fails
             MessageFormatInvalidError
-                When the message data is not valid (eg str or bytes)
+                When the message data is not valid
         '''
         # Make sure the client has been configured
         if not self.__client:
@@ -343,16 +450,31 @@ class ZMQInterface(AppCoreModuleBase):
                 "ZMQ client not configured"
             )
 
-        if isinstance(data, str):
-            _byte_data = data.encode(ENCODE_METHOD)
-        elif isinstance(data, bytes):
-            _byte_data = data
-        else:
+        if not isinstance(data, bytes):
             raise exception.MessageFormatInvalidError(
-                "Data format is invalid"
+                "Message must be in byte format"
             )
 
-        self.__client.send(_byte_data)
+        self.__client.send_multipart([b"", QUERY_MESSAGE, data])
+
+        if self.__client.poll(CLIENT_RESPONSE_TIMEOUT):
+            _msg = self.__client.recv_multipart()
+            if len(_msg) != 1:
+                raise exception.MessageFormatInvalidError(
+                    "Response format invalid"
+                )
+
+            # Extract the messge info
+            if not isinstance(_msg[0], bytes):
+                    raise exception.MessageFormatInvalidError(
+                        "Response must be in byte format"
+                    )
+
+            return _msg[0]
+
+        raise exception.ZMQClientConnectionError(
+            "Connection to ZMQ server failed"
+        )
 
 
     #
@@ -360,14 +482,16 @@ class ZMQInterface(AppCoreModuleBase):
     #
     def request(
             self,
-            data: bytes = b""
+            data: bytes = b"",
+            timeout: int = 0
     ) -> bytes:
         '''
-        Send a request to a ZMQ Server in 'Query_Mode'. This expects a
-        response to the request.
+        Send a request to a ZMQ Server.  The response is sent out of band
+        to allow the serve to continue processing if the request is slow
 
         Args:
             data: (bytes): The data to send
+            timeout (int): Number of seconds to wait for the response
 
         Returns:
             bytes - The response from the server
@@ -382,16 +506,55 @@ class ZMQInterface(AppCoreModuleBase):
                 "ZMQ client not configured"
             )
 
-        self.send(data=data)
+        if not isinstance(data, bytes):
+            raise exception.MessageFormatInvalidError(
+                "Message must be in byte format"
+            )
+
+        if not isinstance(timeout, int): timeout = 0
+
+        # Send the request
+        self.__client.send_multipart([b"", QUERY_REQUEST, data])
 
         if self.__client.poll(CLIENT_RESPONSE_TIMEOUT):
-            _resp = self.__client.recv()
-            if not isinstance(_resp, bytes):
+            _req_resp = self.__client.recv_multipart()
+            if len(_req_resp) != 1:
                 raise exception.MessageFormatInvalidError(
-                    "Response format is invalid"
+                    "Response format invalid"
                 )
 
-            return _resp
+            # Extract the message info
+            _request_id = _req_resp[0]
+            if not isinstance(_request_id, bytes):
+                    raise exception.MessageFormatInvalidError(
+                        "Response must be in byte format"
+                    )
+        else:
+            raise exception.ZMQClientConnectionError(
+                "Connection to ZMQ server failed"
+            )
+
+        # Poll timeout is in milliseconds (so modify the timeout)
+        _poll_timeout = None
+        if timeout > 0: _poll_timeout = timeout * 1000
+
+        # Send a request for the session response
+        self.__client.send_multipart([b"", QUERY_RESPONSE, _request_id])
+
+        if self.__client.poll(timeout=_poll_timeout):
+            _resp = self.__client.recv_multipart()
+            if len(_resp) != 1:
+                raise exception.MessageFormatInvalidError(
+                    "Response format invalid"
+                )
+
+            # Extract the messge info
+            if not isinstance(_resp[0], bytes):
+                    raise exception.MessageFormatInvalidError(
+                        "Response must be in byte format"
+                    )
+
+            return _resp[0]
 
         raise exception.ZMQClientConnectionError(
             "Connection to ZMQ server failed"

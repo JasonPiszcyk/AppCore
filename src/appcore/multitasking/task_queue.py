@@ -296,7 +296,7 @@ class TaskQueue(AppCoreModuleBase):
             timeout: float | None = None
     ) -> MessageFrame | None:
         '''
-        Get a message message frame from the queue
+        Get a message frame from the queue
 
         Args:
             block (bool): If True block until message received. If false,
@@ -459,9 +459,7 @@ class TaskQueue(AppCoreModuleBase):
 
             # Process the data
             if callable(self.message_handler):
-                # print(f"Calling Task Q Handler: >{_frame.data}<")
                 _response = self.message_handler(_frame)
-                # print("Task Q Handler Completed")
 
                 # Is a response required?
                 if _frame.message_type == MessageType.QUERY:

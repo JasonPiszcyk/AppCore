@@ -2,12 +2,16 @@
 ## Release Notes
 
 
-__Version 1.0.8__
+__Version 1.0.9__
 Released: 2025-09-XX
-* New - Add 'send' function to ZMQ
+* New - ZMQ Add 'send' function (expects immediate response)
+* Fix - ZMQ 'request' uses out of band responses to handle slow queries
+* New - ZMQ Add 'response' function (to provide response to 'request')
+* Fix - ZMQ 'server' separated in 'server' (initialisation) and 'listen' (the listen loop)
+* Fix - ZMQ Client Timeout
+* Change - ZMQ - Using DEALER/ROUTER rather than REQ/REP
 * Fix - Check connection state in RMQ before beginning 'listen'
 * Change - RMQ - Move 'use_select' to initiation instead of when starting listener
-* Fix - ZMQ Client Timeout
 
 
 __Version 1.0.8__

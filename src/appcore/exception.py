@@ -68,6 +68,10 @@ class RMQMessageSizeError(Exception):
     pass
 
 
+class ZMQServerNotConfiguredError(Exception):
+    ''' ZMQ Server has not been configured '''
+    pass
+
 class ZMQClientNotConfiguredError(Exception):
     ''' ZMQ Client has not been configured '''
     pass
