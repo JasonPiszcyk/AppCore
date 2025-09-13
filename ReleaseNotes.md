@@ -3,7 +3,7 @@
 
 
 __Version 1.0.9__
-Released: 2025-09-XX
+Released: 2025-09-13
 * New - ZMQ Add 'send' function (expects immediate response)
 * Fix - ZMQ 'request' uses out of band responses to handle slow queries
 * New - ZMQ Add 'response' function (to provide response to 'request')
