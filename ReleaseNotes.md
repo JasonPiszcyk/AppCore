@@ -3,8 +3,8 @@
 
 
 __Version 1.0.10__
-Released: 2025-09-XX
-* Change - 'timestamp' moved to general functions
+Released: 2025-09-14
+* Change - 'timestamp' moved to util.functions
 
 
 __Version 1.0.9__
