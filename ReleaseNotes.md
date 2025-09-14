@@ -2,6 +2,11 @@
 ## Release Notes
 
 
+__Version 1.0.10__
+Released: 2025-09-XX
+* Change - 'timestamp' moved to general functions
+
+
 __Version 1.0.9__
 Released: 2025-09-13
 * New - ZMQ Add 'send' function (expects immediate response)

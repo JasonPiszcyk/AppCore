@@ -35,6 +35,7 @@ import configparser
 # Local app modules
 from appcore.datastore.datastore_base import DataStoreBaseClass
 from appcore.conversion import to_json, from_json, set_value, DataType
+from appcore.util.functions import timestamp
 import appcore.datastore.exception as exception
 
 # Imports for python variable type hints
@@ -225,7 +226,7 @@ class DataStoreINIFile(DataStoreBaseClass):
             )
 
         # Process the expiry list
-        _now = self.timestamp()
+        _now = timestamp()
         _sorted_expiry_list = sorted(self.__data_expiry)
 
         # Begin the lock here - as we need to read/write the file
@@ -409,7 +410,7 @@ class DataStoreINIFile(DataStoreBaseClass):
 
         # Set the expiry info for the item if required
         if timeout > 0:
-            _timestamp = self.timestamp(offset=timeout)
+            _timestamp = timestamp(offset=timeout)
 
             # Append the item name to prevent duplicate keys/timestamps
             self.__data_expiry.append(f"{_timestamp}__{section}__{name}")

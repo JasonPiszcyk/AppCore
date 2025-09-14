@@ -35,6 +35,8 @@ from datetime import datetime, timezone
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
 from appcore.conversion import set_value, DataType
+from appcore.util.functions import timestamp
+
 
 # Imports for python variable type hints
 from typing import Any, Callable
@@ -226,7 +228,7 @@ class _ScheduleDescription():
         except:
             assert False, "time must be in format HH:MM"
 
-        _now_timestamp = AppCoreModuleBase.timestamp()
+        _now_timestamp = timestamp()
         _at_timestamp = _at.timestamp()
 
         # If the timestamp is in the past, set it for same time a day later
@@ -325,7 +327,7 @@ class _ScheduleDescription():
                 return self.__interval * 3600
 
         if self.__schedule_type == "at":
-            _now_timestamp = AppCoreModuleBase.timestamp()
+            _now_timestamp = timestamp()
             return self.__at_timestamp - _now_timestamp
 
         # For all other type of schedule return 0
@@ -364,7 +366,7 @@ class _ScheduleDescription():
         _next_run = self.calc_next_run()
 
         # Append the name to a timestamp to prevent duplicate keys/timestamps
-        _timestamp = AppCoreModuleBase.timestamp(offset=_next_run)
+        _timestamp = timestamp(offset=_next_run)
         _job_name = f"{_timestamp}__{name}"
 
         self.__scheduler._add(
@@ -464,7 +466,7 @@ class Scheduler(AppCoreModuleBase):
             self.logger.debug(f"Checking jobs")
 
             # Run any pending scheduled jobs
-            _now = self.timestamp()
+            _now = timestamp()
             _interval = 3600.0
 
             # Go through all of the jobs looking for jobs to be run
@@ -507,7 +509,7 @@ class Scheduler(AppCoreModuleBase):
                 # Append the name to a timestamp to prevent duplicate
                 # keys/timestamps
                 if _next_run > 0:
-                    _timestamp = self.timestamp(offset=_next_run)
+                    _timestamp = timestamp(offset=_next_run)
                     _job_name = f"{_timestamp}__{_name}"
 
                     # Create a new job / delete the old one

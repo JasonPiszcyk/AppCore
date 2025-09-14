@@ -34,7 +34,7 @@ along with this program (See file: COPYING). If not, see
 from appcore.datastore.datastore_base import DataStoreBaseClass
 import appcore.datastore.exception as exception
 from appcore.conversion import to_json, from_json, set_value, DataType
-
+from appcore.util.functions import timestamp
 
 # Imports for python variable type hints
 from typing import Any
@@ -145,7 +145,7 @@ class DataStoreLocal(DataStoreBaseClass):
             None
         '''
         # Process the expiry list
-        _now = self.timestamp()
+        _now = timestamp()
         _sorted_expiry_list = sorted(self.__data_expiry)
 
         # Use a copy of the expiry list so we can change it during processing
@@ -282,7 +282,7 @@ class DataStoreLocal(DataStoreBaseClass):
 
         # Set the expiry info for the item if required
         if timeout > 0:
-            _timestamp = self.timestamp(offset=timeout)
+            _timestamp = timestamp(offset=timeout)
 
             # Append the item name to prevent duplicate keys/timestamps
             self.__data_expiry.append(f"{_timestamp}__{name}")
