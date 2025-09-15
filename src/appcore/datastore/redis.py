@@ -100,8 +100,8 @@ class DataStoreRedis(DataStoreBaseClass):
             None
         '''
         # Extract the args for the redis connection (prefixed with 'redis_')
-        _redis_args:KeywordDictType = {}
-        _new_kwargs:KeywordDictType = {}
+        _redis_args = {}
+        _new_kwargs = {}
 
         for _key, _value in kwargs.items():
             if _key.find("redis_") == 0:

@@ -166,7 +166,8 @@ class DataStoreBaseClass(AppCoreModuleBase):
             string: The encrypted string
 
         Raises:
-            None
+            TypeError
+                When value is not of type str
         '''
         # Check the type of the value provided
         if not isinstance(value, str):
@@ -174,11 +175,11 @@ class DataStoreBaseClass(AppCoreModuleBase):
                 f"Cannot encrypt data type: {type(value)}"
             )
 
-        _byte_data = str(value).encode(ENCODE_METHOD)
+        _byte_data = value.encode(ENCODE_METHOD)
         _encrypted_string = crypto_tools.fernet.encrypt(
             data=_byte_data,
             key=self._key
-        ).decode()
+        ).decode(ENCODE_METHOD)
 
         if not _encrypted_string:
             return ""
@@ -203,18 +204,29 @@ class DataStoreBaseClass(AppCoreModuleBase):
             string: The decrypted string
 
         Raises:
-            None
-        '''    
+            TypeError
+                When value is not of type str
+        '''
+         # Check the type of the value provided
+        if not isinstance(value, str):
+            raise TypeError(
+                f"Cannot decrypt data type: {type(value)}"
+            )
+
         _byte_data = str(value).encode(ENCODE_METHOD)
-        _decrypted_string = crypto_tools.fernet.decrypt(
+        _decrypted_bytes = crypto_tools.fernet.decrypt(
             data=_byte_data,
             key=self._key
         )
 
-        if not _decrypted_string:
-            return ""
-        else:
-            return str(_decrypted_string)
+        if _decrypted_bytes:
+            try:
+                return _decrypted_bytes.decode(ENCODE_METHOD)
+            except:
+                pass
+
+        return ""
+
 
     ###########################################################################
     #
