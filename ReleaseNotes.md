@@ -2,6 +2,10 @@
 ## Release Notes
 
 
+__Version 1.0.11__
+Released: 2025-09-15
+* New - Added type JSON types
+
 __Version 1.0.10__
 Released: 2025-09-14
 * Change - 'timestamp' moved to util.functions

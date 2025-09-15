@@ -41,6 +41,7 @@ from typing import Any
 # Types
 #
 ###########################################################################
+type JSONTypes = dict | list | tuple | bool | int | float | str | None
 type KeywordDictType = dict[str, Any]
 
 
