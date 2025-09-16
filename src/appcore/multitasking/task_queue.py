@@ -170,6 +170,34 @@ class TaskQueue(AppCoreModuleBase):
     #
     ###########################################################################
     #
+    # put_frame
+    #
+    def put_frame(
+            self,
+            frame: MessageFrame | None = None,
+            block: bool = True,
+            timeout: float | None = None
+    ):
+        '''
+        Put a raw frame on the queue
+
+        Args:
+            frame (MessageFrame | None): The frame to be sent
+            block (bool): If True block until message is placed on queue. If 
+                false, return immediately
+            timeout: Time (in seconds) to wait before returning
+        
+        Returns:
+            None
+
+        Raises:
+            None
+        '''
+        if isinstance(frame, MessageFrame):
+            # Put the frame on the queue
+            self.__queue.put(frame, block=block, timeout=timeout)
+
+    #
     # _put_type
     #
     def _put_type(

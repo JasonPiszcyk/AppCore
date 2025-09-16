@@ -1,9 +1,14 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.13__
+Released: 2025-09-16
+* New - Add put_frame method to task_queue to allow a raw frame to be sent
+
+
 __Version 1.0.12__
 Released: 2025-09-15
-* Fix - Datastore decrytion failing due to incorrect type
+* Fix - Datastore decryption failing due to incorrect type
 
 
 __Version 1.0.11__
