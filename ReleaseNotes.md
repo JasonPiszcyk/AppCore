@@ -4,6 +4,7 @@
 __Version 1.0.13__
 Released: 2025-09-16
 * New - Add put_frame method to task_queue to allow a raw frame to be sent
+* Change - 'send' function modified to be query function (expecting immediate respone)
 
 
 __Version 1.0.12__
