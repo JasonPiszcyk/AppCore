@@ -1,10 +1,18 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.14__
+Released: 2025-09-19
+* Delete - Remove 'send' function
+* New - Add 'request' and 'query' functions
+  * A 'query' is a query for which a response is expected immediately
+  * A 'request' is a query for which the response may take time.  There is the option to time out the request. 
+
+
 __Version 1.0.13__
 Released: 2025-09-16
 * New - Add put_frame method to task_queue to allow a raw frame to be sent
-* Change - 'send' function modified to be query function (expecting immediate respone)
+* Change - 'send' function modified to be query function (expecting immediate response)
 
 
 __Version 1.0.12__
