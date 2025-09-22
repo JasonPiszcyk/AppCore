@@ -1,6 +1,11 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.15__
+Released: 2025-09-22
+* Change - Modified for compatability with 3.8
+
+
 __Version 1.0.14__
 Released: 2025-09-19
 * Delete - Remove 'send' function

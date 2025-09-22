@@ -49,7 +49,10 @@ pip install "appcore @ git+https://github.com/JasonPiszcyk/AppCore"
 
 ## Requirements
 
-- Python >= 3.12
+- Python >= 3.8
+
+If intending to use multiprocessing or queuing it is recommended to use
+Python3.12 or higher as there is better multiproessing support.
 
 ## Dependencies
 
