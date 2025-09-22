@@ -24,6 +24,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 
 # System Modules
@@ -41,8 +43,6 @@ from typing import Any
 # Types
 #
 ###########################################################################
-type JSONTypes = dict | list | tuple | bool | int | float | str | None
-type KeywordDictType = dict[str, Any]
 
 
 ###########################################################################

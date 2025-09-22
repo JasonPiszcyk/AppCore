@@ -26,6 +26,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 
 # System Modules
@@ -38,7 +40,6 @@ from appcore.conversion import to_json, from_json
 
 # Imports for python variable type hints
 from typing import Any
-from appcore.typing import KeywordDictType
 
 
 ###########################################################################
@@ -50,16 +51,13 @@ from appcore.typing import KeywordDictType
 # Types
 #
 
-
 #
 # Constants
 #
 
-
 #
 # Global Variables
 #
-
 
 ###########################################################################
 #

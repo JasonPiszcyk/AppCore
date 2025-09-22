@@ -24,6 +24,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 
 # System Modules
@@ -42,7 +44,6 @@ from appcore.util.functions import timestamp
 from typing import Any, Callable
 from multiprocessing.managers import DictProxy
 from threading import Event as EventType
-from appcore.typing import KeywordDictType
 
 
 ###########################################################################
@@ -341,7 +342,7 @@ class _ScheduleDescription():
             self,
             name: str = "",
             func: Callable | None = None,
-            kwargs: KeywordDictType = {}
+            kwargs: dict = {}
     ) -> str:
         '''
         Add a scheduled job (Usually at the end of a schedule chain)
@@ -633,7 +634,7 @@ class Scheduler(AppCoreModuleBase):
             self,
             jobname: str = "",
             func: Callable | None = None,
-            kwargs: KeywordDictType = {},
+            kwargs: dict = {},
             schedule_type: str = "interval",
             interval: int = 0,
     ) -> None:

@@ -24,6 +24,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 
 # System Modules
@@ -46,7 +48,6 @@ from multiprocessing.context import SpawnContext, DefaultContext
 from multiprocessing.process import BaseProcess
 from multiprocessing.managers import DictProxy
 from threading import Event as EventType
-from appcore.typing import KeywordDictType
 
 
 ##########################################################################
@@ -57,7 +58,6 @@ from appcore.typing import KeywordDictType
 #
 # Types
 #
-type ContextType = SpawnContext | DefaultContext
 TaskTypeType = Literal["thread", "process"]
 
 #
@@ -106,16 +106,16 @@ class Task(AppCoreModuleBase):
     def __init__(
             self,
             *args,
-            context: ContextType | None = None,
+            context: SpawnContext | DefaultContext | None = None,
             info_dict: DictProxy[Any, Any] | None = None,
             results_dict: DictProxy[Any, Any] | None = None,
             start_event: EventType | None = None,
             stop_event: EventType | None = None,
             name: str = "",
             target: Callable | None = None,
-            target_kwargs: KeywordDictType = {},
+            target_kwargs: dict = {},
             stop_function: Callable | None = None,
-            stop_kwargs: KeywordDictType = {},
+            stop_kwargs: dict = {},
             task_type: TaskTypeType = "thread",
             **kwargs
      ):
@@ -125,7 +125,8 @@ class Task(AppCoreModuleBase):
         Args:
             *args (Undef): Unnamed arguments to be passed to the constructor
                 of the inherited process
-            context (ContextType): The context to run multiprocessing in
+            context (SpawnContext | DefaultContext): The context to run
+                multiprocessing in
             info_dict (dict): SyncManger dict to store info on the task
             results_dict (dict): SyncManger dict to store the tasks results
             start_event (Event): A SyncManager event to signal start complete
@@ -160,7 +161,7 @@ class Task(AppCoreModuleBase):
                 f"'{task_type}' is not in {task_type_options}"
 
         # Private Attributes
-        self.__context: ContextType = context or get_context()
+        self.__context = context or get_context()
 
         self.__task_type = task_type
         self.__thread_id: int | None = None
@@ -184,12 +185,12 @@ class Task(AppCoreModuleBase):
         self.name: str = name if name else str(uuid.uuid4())
         self.target: Callable | None = target
         if target_kwargs:
-            self.target_kwargs: KeywordDictType = target_kwargs
+            self.target_kwargs: dict = target_kwargs
         else:
-            self.target_kwargs: KeywordDictType = {}
+            self.target_kwargs: dict = {}
 
         self.stop_function: Callable | None = stop_function
-        self.stop_kwargs: KeywordDictType = stop_kwargs or {}
+        self.stop_kwargs: dict = stop_kwargs or {}
 
         self.task_action = TaskAction.IGNORE.value
 
@@ -369,7 +370,7 @@ class Task(AppCoreModuleBase):
             self.logger.debug(f"Start: Task Type = {self.__task_type}")
 
             # Wrap the target functions to gather information
-            _kwargs: KeywordDictType = {
+            _kwargs = {
                 "target": self.target,
                 "kwargs": self.target_kwargs,
                 "info": self.__info,

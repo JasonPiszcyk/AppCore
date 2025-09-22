@@ -24,6 +24,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 
 # System Modules

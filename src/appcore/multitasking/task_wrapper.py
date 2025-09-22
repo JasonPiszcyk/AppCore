@@ -25,6 +25,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 import logging
 
@@ -44,7 +46,6 @@ from typing import Any, Callable
 from threading import Event as EventType
 from logging import Handler as HandlerType
 from appcore.typing import LoggingLevel
-from appcore.typing import KeywordDictType
 
 
 ###########################################################################
@@ -77,7 +78,7 @@ from appcore.typing import KeywordDictType
 #
 def task_wrapper(
         target: Callable | None = None,
-        kwargs: KeywordDictType = {},
+        kwargs: dict = {},
         info: dict = {},
         parent_pid: int = 0,
         start_event: EventType | None = None,

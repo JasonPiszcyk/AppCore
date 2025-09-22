@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Core Components used to create an application"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

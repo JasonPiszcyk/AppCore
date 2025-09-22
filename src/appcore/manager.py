@@ -24,6 +24,8 @@ along with this program (See file: COPYING). If not, see
 # Imports
 #
 ###########################################################################
+from __future__ import annotations
+
 # Shared variables, constants, etc
 
 # System Modules
@@ -49,7 +51,7 @@ from multiprocessing.managers import SyncManager as SyncManagerType
 from threading import Lock as LockType
 from threading import Barrier as BarrierType
 from threading import Event as EventType
-from appcore.typing import KeywordDictType, LoggingLevel
+from appcore.typing import LoggingLevel
 
 
 ###########################################################################
@@ -269,9 +271,9 @@ class AppCoreManager(AppCoreModuleBase):
             self,
             name: str = "",
             target: Callable | None = None,
-            kwargs: KeywordDictType = {},
+            kwargs: dict = {},
             stop_function: Callable | None = None,
-            stop_kwargs: KeywordDictType = {},
+            stop_kwargs: dict = {},
      ) -> Task:
         '''
         Create a thread based Task
@@ -321,9 +323,9 @@ class AppCoreManager(AppCoreModuleBase):
             self,
             name: str = "",
             target: Callable | None = None,
-            kwargs: KeywordDictType = {},
+            kwargs: dict = {},
             stop_function: Callable | None = None,
-            stop_kwargs: KeywordDictType = {},
+            stop_kwargs: dict = {},
      ) -> Task:
         '''
         Create a process based Task
@@ -714,7 +716,7 @@ class AppCoreManager(AppCoreModuleBase):
             salt: bytes = b"",
             security: str = "high",
             dot_names: bool = False,
-            **kwargs: KeywordDictType
+            **kwargs: dict
     ) -> DataStoreRedis:
         '''
         Create a System Datastore (using the multiprocessing manager)
