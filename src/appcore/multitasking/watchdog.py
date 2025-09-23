@@ -30,12 +30,12 @@ from __future__ import annotations
 
 # System Modules
 from threading import enumerate as enumerate_threads
-import traceback
 import uuid
 
 # Local app modules
 from appcore.appcore_base import AppCoreModuleBase
 from appcore.typing import TaskStatus
+from appcore.util.functions import timestamp
 
 # Imports for python variable type hints
 from typing import Any
@@ -59,6 +59,8 @@ from appcore.multitasking.task import Task as TaskType
 #
 WATCHDOG_JOIN_TIMEOUT = 5.0
 WATCHDOG_SHUTDOWN_TIMEOUT = 5.0
+
+TELEMETRY_ENTRY = "__$$$__TELEMETRY__$$$__"
 
 #
 # Global Variables
@@ -156,6 +158,19 @@ class Watchdog(AppCoreModuleBase):
             self.__task_stop_dict = task_stop_dict
             self.__task_restart_dict = task_restart_dict
 
+        # Set the telemetry info on the watchdog
+        self.__task_start_dict[TELEMETRY_ENTRY] = {
+            "scanned": 0
+        }
+
+        self.__task_stop_dict[TELEMETRY_ENTRY] = {
+            "scanned": 0
+        }
+
+        self.__task_restart_dict[TELEMETRY_ENTRY] = {
+            "scanned": 0
+        }
+
         self.__thread_only = thread_only
         self.__stop_event = stop_event
         self.__shutdown_event = shutdown_event
@@ -208,6 +223,11 @@ class Watchdog(AppCoreModuleBase):
                 #
                 _task_list = list(self.__task_stop_dict.keys())
                 for _key in _task_list:
+                    # Update telemetry
+                    if _key == TELEMETRY_ENTRY:
+                        self.__task_stop_dict[_key]['scanned'] = timestamp()
+                        continue
+
                     _task: TaskType = self.__task_stop_dict[_key]
                     self.logger.info(
                         f"Watchdog: Task ({_key}): [id={_task.id}] " +
@@ -229,6 +249,11 @@ class Watchdog(AppCoreModuleBase):
                 #
                 _task_list = list(self.__task_start_dict.keys())
                 for _key in _task_list:
+                    # Update telemetry
+                    if _key == TELEMETRY_ENTRY:
+                        self.__task_start_dict[_key]['scanned'] = timestamp()
+                        continue
+
                     _task: TaskType = self.__task_start_dict[_key]
                     self.logger.info(
                         f"Watchdog: Task ({_key}): Start has been requested"
@@ -244,6 +269,11 @@ class Watchdog(AppCoreModuleBase):
                 #
                 _task_list = list(self.__task_restart_dict.keys())
                 for _key in _task_list:
+                    # Update telemetry
+                    if _key == TELEMETRY_ENTRY:
+                        self.__task_restart_dict[_key]['scanned'] = timestamp()
+                        continue
+
                     _task: TaskType = self.__task_restart_dict[_key]
 
                     _restart_task = False
@@ -271,9 +301,7 @@ class Watchdog(AppCoreModuleBase):
                         )
 
             except:
-                self.logger.error("Watchdog has failed")
-                _exception_stack = traceback.format_exc()
-                self.logger.error(_exception_stack)
+                self.logger.error("Watchdog has failed", exc_info=True)
 
             # Pause for the interval - Can be woken up if needed
             if self.__interval_event.wait(timeout=interval):
@@ -286,6 +314,11 @@ class Watchdog(AppCoreModuleBase):
 
         _task_list = list(self.__task_start_dict.keys())
         for _key in _task_list:
+            # Update telemetry
+            if _key == TELEMETRY_ENTRY:
+                self.__task_start_dict[_key]['scanned'] = timestamp()
+                continue
+
             _task: TaskType = self.__task_start_dict[_key]
             self.logger.debug(f"Setting stop (start): {_task.name}")
             self.__task_stop_dict[_key] = _task
@@ -293,6 +326,11 @@ class Watchdog(AppCoreModuleBase):
 
         _task_list = list(self.__task_restart_dict.keys())
         for _key in _task_list:
+            # Update telemetry
+            if _key == TELEMETRY_ENTRY:
+                self.__task_restart_dict[_key]['scanned'] = timestamp()
+                continue
+
             _task: TaskType = self.__task_restart_dict[_key]
             self.logger.debug(f"Setting stop (restart): {_task.name}")
             self.__task_stop_dict[_key] = _task
@@ -300,6 +338,11 @@ class Watchdog(AppCoreModuleBase):
 
         _task_list = list(self.__task_stop_dict.keys())
         for _key in _task_list:
+            # Update telemetry
+            if _key == TELEMETRY_ENTRY:
+                self.__task_stop_dict[_key]['scanned'] = timestamp()
+                continue
+
             _task: TaskType = self.__task_stop_dict[_key]
             self.logger.debug(f"Stopping: {_task.name}")
             _task.stop()

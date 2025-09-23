@@ -47,6 +47,7 @@ from typing import Any
 # The message types
 class MessageType(enum.Enum):
     EMPTY           = "__message_type_empty__"
+    KEEPALIVE       = "__message_type_keepalive__"
     EXIT            = "__message_type_exit__"
     DATA            = "__message_type_data__"
     QUERY           = "__message_type_query__"

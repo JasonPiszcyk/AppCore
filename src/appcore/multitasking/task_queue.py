@@ -57,6 +57,7 @@ from threading import Event as EventType
 # Constants
 #
 STOP_WAIT_TIMEOUT: float = 5.0
+INTERNAL_KEEPALIVE_INTERVAL = 3600
 
 
 #
@@ -451,23 +452,52 @@ class TaskQueue(AppCoreModuleBase):
         # If the listener is already running, just return
         if self.__listener_running: return
 
-        _timeout = None
+        # timeout is the smaller of the internal timeout value and the
+        # keepalive interval (if it is > 0)
+        _keepalive_interval = 0
         if isinstance(self.keepalive_interval, int) and \
-                self.keepalive_interval > 0:
-            _timeout=self.keepalive_interval
+                self.keepalive_interval >= 0:
+            _keepalive_interval = self.keepalive_interval
+
+        _timeout = INTERNAL_KEEPALIVE_INTERVAL
+        if (
+            _keepalive_interval > 0 and 
+            _keepalive_interval < INTERNAL_KEEPALIVE_INTERVAL
+        ):
+            _timeout = _keepalive_interval
 
         self.__listener_running = True
         while self.__listener_running:
             _frame = None
             _keepalive_interval_exceeded = False
+            _keepalive_needed = False
 
             try:
                 _frame = self.get(block=True, timeout=_timeout)
 
             except queue.Empty:
-                # Timed out - Should have received a keepalive before this
-                _keepalive_interval_exceeded = True
+                # Is this because of the the internal or keepalive interval?
+                if _keepalive_interval <= INTERNAL_KEEPALIVE_INTERVAL:
+                    # Timeout due to keepalive internal
+                    _keepalive_interval_exceeded = True
 
+                elif _timeout < INTERNAL_KEEPALIVE_INTERVAL:
+                    # Timeout due to keepalive internal
+                    _keepalive_interval_exceeded = True
+
+                    # _keepalive_interval > INTERNAL_KEEPALIVE_INTERVAL
+                    # reset next timeout to INTERNAL_KEEPALIVE_INTERVAL
+                    _timeout = INTERNAL_KEEPALIVE_INTERVAL
+
+                else:
+                    # Timeout due to Internal Keepalive value
+                    _keepalive_needed = True
+
+                    # Determine the next timeout
+                    if _keepalive_interval > 0:
+                        _timeout = _keepalive_interval - \
+                                INTERNAL_KEEPALIVE_INTERVAL
+ 
             except exception.MultiTaskingQueueFrameExit:
                 # The exit message frame was received
                 self.__listener_running = False
@@ -482,10 +512,21 @@ class TaskQueue(AppCoreModuleBase):
                     "No Keepalive message received within interval"
                 )
 
+            if _keepalive_needed:
+                # Put a message on the queue with a type of 'KEEPALIVE'
+                self._put_type(
+                    item="keepalive",
+                    message_type=MessageType.KEEPALIVE
+                )
+                continue
+
             if not _frame:
                 raise exception.MultiTaskingQueueInvalidFormatError(
                     "Message did not contain a frame"
                 )
+
+            # Nothing to do with the keepalive
+            if _frame.message_type == MessageType.KEEPALIVE: continue
 
             # Process the data
             if callable(self.message_handler):

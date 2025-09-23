@@ -529,7 +529,7 @@ class ZMQInterface(AppCoreModuleBase):
         Send a request to a ZMQ Server.  The response is sent out of band
         to allow the server to continue processing if the request is slow.
 
-        This function will block until the response is received ot timeout
+        This function will block until the response is received or the timeout
         occurs.
 
         Args:
@@ -542,6 +542,8 @@ class ZMQInterface(AppCoreModuleBase):
         Raises:
             ZMQClientNotConfiguredError:
                 When the ZMQ client is not configured
+            ZMQRequestTimeOut:
+                When the connection timeout is reached
         '''
         # Make sure the client has been configured
         if not self.__client:
@@ -585,8 +587,8 @@ class ZMQInterface(AppCoreModuleBase):
             _transient.disconnect(f"tcp://{self.__address}:{self.__port}")
             return _resp[0]
 
-        raise exception.ZMQClientConnectionError(
-            "Connection to ZMQ server failed"
+        raise exception.ZMQRequestTimeOut(
+            "Request has timed out"
         )
 
 

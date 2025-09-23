@@ -82,6 +82,11 @@ class ZMQClientConnectionError(Exception):
     pass
 
 
+class ZMQRequestTimeOut(Exception):
+    ''' ZMQ Request has timed out '''
+    pass
+
+
 class MessageFormatInvalidError(Exception):
     ''' The message format is invalid '''
     pass

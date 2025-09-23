@@ -51,8 +51,7 @@ pip install "appcore @ git+https://github.com/JasonPiszcyk/AppCore"
 
 - Python >= 3.8
 
-If intending to use multiprocessing or queuing it is recommended to use
-Python3.12 or higher as there is better multiproessing support.
+**NOTE:** The task_queue module does not work correctly on Python versions < 3.12 due to problems in thge SyncManager implementation.  If intending to use queuing it is recommended to use Python 3.12 or higher as there is better multiprocessing support.
 
 ## Dependencies
 

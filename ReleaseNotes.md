@@ -1,6 +1,13 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.16__
+Released: 2025-09-23
+* New - Added exception ZMQRequestTimeOut
+* Change - Add internal keepalive processing for queues
+* Change - Add internal keepalive via telemetry for watchdog 'dicts'
+
+
 __Version 1.0.15__
 Released: 2025-09-22
 * Change - Modified for compatability with 3.8
