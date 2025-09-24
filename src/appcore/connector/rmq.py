@@ -426,6 +426,7 @@ class RMQInterface():
             # Set the connection parameters
             _conn_params = pika.ConnectionParameters(
                 host=self.__host,
+                port=self.__port,
                 credentials=_credentials,
                 virtual_host=self.vhost,
                 client_properties={
@@ -990,7 +991,7 @@ class RMQInterface():
         Raises:
             AssertionError:
                 when message_handler is not callable
-       '''
+        '''
         assert callable(self.message_handler), \
             "message_handler must be callable"
 

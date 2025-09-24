@@ -1,6 +1,12 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.18__
+Released: 2025-09-24
+* Fix - Added 'port' connection for AMQP
+
+
+
 __Version 1.0.17__
 Released: 2025-09-24
 * New - Added 'receive' method to RMQ to receive a single message
