@@ -283,7 +283,7 @@ class ZMQInterface(AppCoreModuleBase):
     #
     def listen(
             self,
-            ) -> None:
+    ) -> None:
         '''
         Begin listening for messages
 

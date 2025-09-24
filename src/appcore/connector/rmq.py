@@ -56,7 +56,6 @@ from typing import Callable
 # Types
 #
 
-
 #
 # Constants
 #
@@ -66,6 +65,15 @@ PREFETCH_COUNT = 1
 #
 # Global Variables
 #
+
+
+###########################################################################
+#
+# Exceptions
+#
+###########################################################################
+class RMQ_Timeout(RuntimeWarning):
+    pass
 
 
 ###########################################################################
@@ -232,6 +240,59 @@ class RMQInterface():
         self.send_message(body=body, properties=properties)
         self.close_channel()
         self.close_connection()
+
+
+    #
+    # receive
+    #
+    def receive(
+            self,
+            timeout=0
+    ) -> tuple[bytes, pika.BasicProperties]:
+        '''
+        Receive a single message
+
+        Parameters:
+            timeout: Number of seconds to wait for a message before giving up
+
+        Return Value:
+            bytes: The bytes contained in the data
+            BasicProperties: The properties from the message
+        '''
+        _msg_bytes = b""
+        _msg_properties = pika.BasicProperties()
+
+        if not isinstance(self.__connection, pika.BlockingConnection):
+            return _msg_bytes, _msg_properties
+
+        if not isinstance(self.__channel, pika.channel.Channel):
+            return _msg_bytes, _msg_properties
+
+        if not self.__channel.is_open:
+            return _msg_bytes, _msg_properties
+
+        # Set up signal handler for an alarm to create the timeout
+        def timeout_handler(signum, frame):
+            raise RMQ_Timeout("Timeout")
+
+        import signal
+        signal.signal(signal.SIGALRM, timeout_handler)
+
+        # Set an alarm
+        signal.alarm(timeout)
+
+        # Wait for the reply message
+        try:
+            _, _msg_properties, _msg_bytes = self.__channel.basic_get(
+                self.queue,
+                auto_ack=True
+            )   # type: ignore
+
+        except RMQ_Timeout:
+            # Timed out waiting for a message
+            self.stop()
+
+        return _msg_bytes, _msg_properties
 
 
     #
