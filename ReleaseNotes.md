@@ -1,6 +1,11 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.17__
+Released: 2025-09-24
+* New - Added 'receive' method to RMQ to receive a single message
+
+
 __Version 1.0.16__
 Released: 2025-09-23
 * New - Added exception ZMQRequestTimeOut
