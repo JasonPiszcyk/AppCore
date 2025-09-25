@@ -1,6 +1,12 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.20__
+Released: 2025-09-XX
+* Fix - RMQInterface - Correct 'receive' function connect/disconnect
+* Fix - TaskQueue - Correct calculations for timeouts and keepalives
+
+
 __Version 1.0.19__
 Released: 2025-09-25
 * Fix - RMQInterface - Moved all double underscore properties to single underscore properties
