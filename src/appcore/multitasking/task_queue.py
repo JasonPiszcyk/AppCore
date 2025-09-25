@@ -488,6 +488,12 @@ class TaskQueue(AppCoreModuleBase):
                     # _keepalive_interval > INTERNAL_KEEPALIVE_INTERVAL
                     # reset next timeout to INTERNAL_KEEPALIVE_INTERVAL
                     _timeout = INTERNAL_KEEPALIVE_INTERVAL
+                    if (
+                        _keepalive_interval > 0 and 
+                        _keepalive_interval < INTERNAL_KEEPALIVE_INTERVAL
+                    ):
+                        _timeout = _keepalive_interval
+
 
                 else:
                     # Timeout due to Internal Keepalive value
@@ -524,8 +530,8 @@ class TaskQueue(AppCoreModuleBase):
                 raise exception.MultiTaskingQueueInvalidFormatError(
                     "Message did not contain a frame"
                 )
-
-            # Nothing to do with the keepalive
+            
+            # Nothing to process with the keepalive
             if _frame.message_type == MessageType.KEEPALIVE: continue
 
             # Process the data

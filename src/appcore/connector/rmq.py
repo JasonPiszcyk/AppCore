@@ -263,6 +263,14 @@ class RMQInterface():
         _msg_bytes = b""
         _msg_properties = pika.BasicProperties()
 
+        self._use_select_connection = False
+
+        # Set up the connection
+        self.connect()
+        self.open_channel()
+        self.setup_exchange()
+        self.setup_queue()
+
         if not isinstance(self._connection, pika.BlockingConnection):
             return _msg_bytes, _msg_properties
 
@@ -272,17 +280,20 @@ class RMQInterface():
         if not self._channel.is_open:
             return _msg_bytes, _msg_properties
 
-        # Set up signal handler for an alarm to create the timeout
-        def timeout_handler(signum, frame):
-            raise RMQ_Timeout("Timeout")
-
         import signal
-        signal.signal(signal.SIGALRM, timeout_handler)
 
-        # Set an alarm
-        signal.alarm(timeout)
+        if isinstance(timeout, int) and timeout > 0:
+            # Set up signal handler for an alarm to create the timeout
+            def timeout_handler(signum, frame):
+                raise RMQ_Timeout("Timeout")
 
-        # Wait for the reply message
+            signal.signal(signal.SIGALRM, timeout_handler)
+
+            # Set an alarm
+            signal.alarm(timeout)
+
+        # Wait for the reply message (will get a signal after timeout seconds)
+        _timeout_occurred = False
         try:
             _, _msg_properties, _msg_bytes = self._channel.basic_get(
                 self.queue,
@@ -290,8 +301,18 @@ class RMQInterface():
             )   # type: ignore
 
         except RMQ_Timeout:
-            # Timed out waiting for a message
-            self.stop()
+            _timeout_occurred = True
+
+        # Cancel the alarm (if set)
+        signal.alarm(0)
+
+        # Close the connection
+        self.close_channel()
+        self.close_connection()
+
+        if _timeout_occurred:
+            # Timeout - raise a timeout error
+            raise TimeoutError
 
         return _msg_bytes, _msg_properties
 
@@ -434,7 +455,7 @@ class RMQInterface():
                     'connection_name': self._connection_name,
                 }
             )
-        
+
         # Create a connection
         if self._use_select_connection:
             self._connection = pika.SelectConnection(

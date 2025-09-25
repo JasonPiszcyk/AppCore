@@ -468,7 +468,7 @@ class Scheduler(AppCoreModuleBase):
 
             # Run any pending scheduled jobs
             _now = timestamp()
-            _interval = 3600.0
+            _interval = 300.0
 
             # Go through all of the jobs looking for jobs to be run
             _sorted_job_list = sorted(list(self.__jobs.keys()))
