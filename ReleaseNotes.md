@@ -1,10 +1,14 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.19__
+Released: 2025-09-25
+* Fix - RMQInterface - Moved all double underscore properties to single underscore properties
+
+
 __Version 1.0.18__
 Released: 2025-09-24
 * Fix - Added 'port' connection for AMQP
-
 
 
 __Version 1.0.17__
