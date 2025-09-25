@@ -151,37 +151,38 @@ class RMQInterface():
             None
         '''
         # Private Attributes
-        self.__username = username
-        self.__password = password
-        self.__host = host
+        self._username = username
+        self._password = password
+        self._host = host
 
-        self.__ca_cert = ca_cert
-        self.__cert_pub = cert_pub
-        self.__cert_key = cert_key
-        self.__connection_name = connection_name
-        self.__exchange = exchange
-        self.__routing_key = routing_key
+        self._ca_cert = ca_cert
+        self._cert_pub = cert_pub
+        self._cert_key = cert_key
+        self._connection_name = connection_name
+        self._exchange = exchange
+        self._routing_key = routing_key
 
         if not isinstance(port, int) or port < 1 or port > 65535:
-            if self.__ca_cert and self.__cert_pub and self.__cert_key:
+            if self._ca_cert and self._cert_pub and self._cert_key:
                 # Default to secure
-                self.__port = 5671
+                self._port = 5671
             else:
                 # Default to normal
-                self.__port = 5672
+                self._port = 5672
         else:
             # User supplied port
-            self.__port = port
+            self._port = port
 
         # Connection management attributes
-        self.__connection: \
+        self._connection: \
             None | pika.BlockingConnection | pika.SelectConnection = None
-        self.__channel:  pika.channel.Channel | \
+        self._channel:  pika.channel.Channel | \
             pika.adapters.blocking_connection.BlockingChannel | None = None
 
-        self.__use_select_connection = use_select
-        self.__closing = False
-        self.__consuming = False
+        self._consumer_tag = ""
+        self._use_select_connection = use_select
+        self._closing = False
+        self._consuming = False
 
         # Attributes
         self.vhost = vhost
@@ -201,7 +202,7 @@ class RMQInterface():
     @property
     def consuming(self) -> bool:
         '''  '''
-        return self.__consuming
+        return self._consuming
 
 
     ###########################################################################
@@ -230,7 +231,7 @@ class RMQInterface():
         Raises:
             None
         '''
-        self.__use_select_connection = False
+        self._use_select_connection = False
 
         # Send the message
         self.connect()
@@ -262,13 +263,13 @@ class RMQInterface():
         _msg_bytes = b""
         _msg_properties = pika.BasicProperties()
 
-        if not isinstance(self.__connection, pika.BlockingConnection):
+        if not isinstance(self._connection, pika.BlockingConnection):
             return _msg_bytes, _msg_properties
 
-        if not isinstance(self.__channel, pika.channel.Channel):
+        if not isinstance(self._channel, pika.channel.Channel):
             return _msg_bytes, _msg_properties
 
-        if not self.__channel.is_open:
+        if not self._channel.is_open:
             return _msg_bytes, _msg_properties
 
         # Set up signal handler for an alarm to create the timeout
@@ -283,7 +284,7 @@ class RMQInterface():
 
         # Wait for the reply message
         try:
-            _, _msg_properties, _msg_bytes = self.__channel.basic_get(
+            _, _msg_properties, _msg_bytes = self._channel.basic_get(
                 self.queue,
                 auto_ack=True
             )   # type: ignore
@@ -312,14 +313,14 @@ class RMQInterface():
             None
         '''
         # Ensure the connection is open
-        if not self.__connection or not self.__connection.is_open:
+        if not self._connection or not self._connection.is_open:
             self.connect()
 
-        if self.__use_select_connection:
-            if isinstance(self.__connection, pika.SelectConnection):
-                self.__connection.ioloop.start()
+        if self._use_select_connection:
+            if isinstance(self._connection, pika.SelectConnection):
+                self._connection.ioloop.start()
         else:
-            if isinstance(self.__connection, pika.BlockingConnection):
+            if isinstance(self._connection, pika.BlockingConnection):
                 self.open_channel()
                 self.setup_exchange()
                 self.setup_queue()
@@ -342,15 +343,15 @@ class RMQInterface():
         Raises:
             None
         '''
-        if not self.__closing:
-            self.__closing = True
+        if not self._closing:
+            self._closing = True
 
-        if self.__consuming:
+        if self._consuming:
             self.stop_consuming()
 
-        if self.__use_select_connection: 
-            if isinstance(self.__connection, pika.SelectConnection):
-                self.__connection.ioloop.stop()
+        if self._use_select_connection: 
+            if isinstance(self._connection, pika.SelectConnection):
+                self._connection.ioloop.stop()
 
 
     ###########################################################################
@@ -381,30 +382,30 @@ class RMQInterface():
                 When cert_pub file cannot be found
                 When cert_key file cannot be found
         '''
-        assert isinstance(self.__username, str) and self.__username, \
+        assert isinstance(self._username, str) and self._username, \
             "username not supplied"
-        assert isinstance(self.__password, str) and self.__password, \
+        assert isinstance(self._password, str) and self._password, \
             "password not supplied"
-        assert isinstance(self.__host, str) and self.__host, \
+        assert isinstance(self._host, str) and self._host, \
             "Rabbit MQ host not supplied"
         assert isinstance(self.vhost, str) and self.vhost, \
             "vhost not supplied"
 
         # Set up credentials
-        _credentials = pika.PlainCredentials(self.__username, self.__password)
+        _credentials = pika.PlainCredentials(self._username, self._password)
 
-        if self.__ca_cert and self.__cert_pub and self.__cert_key:
+        if self._ca_cert and self._cert_pub and self._cert_key:
             # Try to create a session over TLS
-            assert os.path.isfile(self.__ca_cert), \
-                f"cannot find CA Cert file: {self.__ca_cert}"
-            assert os.path.isfile(self.__cert_pub), \
-                f"cannot find Cert file: {self.__cert_pub}"
-            assert os.path.isfile(self.__cert_key), \
-                f"cannot find Cert Key file: {self.__cert_key}"
+            assert os.path.isfile(self._ca_cert), \
+                f"cannot find CA Cert file: {self._ca_cert}"
+            assert os.path.isfile(self._cert_pub), \
+                f"cannot find Cert file: {self._cert_pub}"
+            assert os.path.isfile(self._cert_key), \
+                f"cannot find Cert Key file: {self._cert_key}"
 
             # Create the context for SSL
-            _context = ssl.create_default_context(cafile=self.__ca_cert)
-            _context.load_cert_chain(self.__cert_pub, self.__cert_key)
+            _context = ssl.create_default_context(cafile=self._ca_cert)
+            _context.load_cert_chain(self._cert_pub, self._cert_key)
 
             _context.check_hostname = False
             _context.verify_mode = ssl.CERT_REQUIRED
@@ -413,30 +414,30 @@ class RMQInterface():
 
             # Set the connection parameters
             _conn_params = pika.ConnectionParameters(
-                host=self.__host,
-                port=self.__port,
+                host=self._host,
+                port=self._port,
                 credentials=_credentials,
                 virtual_host=self.vhost,
                 ssl_options=_ssl_options,
                 client_properties={
-                    'connection_name': self.__connection_name,
+                    'connection_name': self._connection_name,
                 }
             )
         else:
             # Set the connection parameters
             _conn_params = pika.ConnectionParameters(
-                host=self.__host,
-                port=self.__port,
+                host=self._host,
+                port=self._port,
                 credentials=_credentials,
                 virtual_host=self.vhost,
                 client_properties={
-                    'connection_name': self.__connection_name,
+                    'connection_name': self._connection_name,
                 }
             )
         
         # Create a connection
-        if self.__use_select_connection:
-            self.__connection = pika.SelectConnection(
+        if self._use_select_connection:
+            self._connection = pika.SelectConnection(
                 parameters=_conn_params,
                 on_open_callback=self.on_connection_open,
                 on_open_error_callback=self.on_connection_open_error,
@@ -444,10 +445,10 @@ class RMQInterface():
             )
 
         else:
-            self.__connection = pika.BlockingConnection(_conn_params)
+            self._connection = pika.BlockingConnection(_conn_params)
     
         # Check the connection is OK
-        if not self.__connection:
+        if not self._connection:
             raise exception.RMQConnectionError(
                 "Unable to establish RabbitMQ Connection"
             )
@@ -470,24 +471,24 @@ class RMQInterface():
             RMQConnectionError
                when the connection is not the correct type
         '''
-        self.__consuming = False
+        self._consuming = False
 
-        if self.__use_select_connection:
-            if not isinstance(self.__connection, pika.SelectConnection):
+        if self._use_select_connection:
+            if not isinstance(self._connection, pika.SelectConnection):
                 raise exception.RMQConnectionError(
                     "Connection is not select connection"
                 )
 
-            if self.__connection and not self.__connection.is_closing and \
-                        not self.__connection.is_closed:
-                self.__connection.close()
+            if self._connection and not self._connection.is_closing and \
+                        not self._connection.is_closed:
+                self._connection.close()
         else:
-            if not isinstance(self.__connection, pika.BlockingConnection):
+            if not isinstance(self._connection, pika.BlockingConnection):
                 raise exception.RMQConnectionError(
                     "Connection is not blocking connection"
                 )
 
-            if not self.__connection.is_closed: self.__connection.close()
+            if not self._connection.is_closed: self._connection.close()
 
 
 
@@ -511,7 +512,7 @@ class RMQInterface():
         Raises:
             None
         '''
-        # Ignore connection - Already stored as self.__connection
+        # Ignore connection - Already stored as self._connection
         del connection
 
         self.open_channel()
@@ -539,7 +540,7 @@ class RMQInterface():
             RMQConnectionError
                when the connection attempt has failed
         '''
-        # Ignore connection - Already stored as self.__connection
+        # Ignore connection - Already stored as self._connection
         del connection
 
         raise exception.RMQConnectionError(
@@ -570,20 +571,20 @@ class RMQInterface():
             RMQConnectionError
                when the connection is not the correct type
         '''
-        # Ignore connection - Already stored as self.__connection
+        # Ignore connection - Already stored as self._connection
         # Ignore err - Unused
         del connection
         del err
 
-        self.__channel = None
-        if self.__closing:
+        self._channel = None
+        if self._closing:
             # Should only be here for select connections
-            if not isinstance(self.__connection, pika.SelectConnection):
+            if not isinstance(self._connection, pika.SelectConnection):
                 raise exception.RMQConnectionError(
                     "Connection is not select connection"
                 )
 
-            self.__connection.ioloop.stop()
+            self._connection.ioloop.stop()
 
 
     ###########################################################################
@@ -608,20 +609,20 @@ class RMQInterface():
             RMQConnectionError
                when the connection is not the correct type
         '''
-        if self.__use_select_connection:
-            if not isinstance(self.__connection, pika.SelectConnection):
+        if self._use_select_connection:
+            if not isinstance(self._connection, pika.SelectConnection):
                 raise exception.RMQConnectionError(
                     "Connection is not select connection"
                 )
 
-            self.__connection.channel(on_open_callback=self.on_channel_open)
+            self._connection.channel(on_open_callback=self.on_channel_open)
         else:
-            if not isinstance(self.__connection, pika.BlockingConnection):
+            if not isinstance(self._connection, pika.BlockingConnection):
                 raise exception.RMQConnectionError(
                     "Connection is not blocking connection"
                 )
 
-            self.__channel = self.__connection.channel()
+            self._channel = self._connection.channel()
 
 
 
@@ -641,8 +642,8 @@ class RMQInterface():
         Raises:
             None
         '''
-        if self.__channel: self.__channel.close()
-        self.__channel = None
+        if self._channel: self._channel.close()
+        self._channel = None
 
 
     #
@@ -664,8 +665,8 @@ class RMQInterface():
         Raises:
             None
         '''
-        self.__channel = channel
-        self.__channel.add_on_close_callback(self.on_channel_closed)
+        self._channel = channel
+        self._channel.add_on_close_callback(self.on_channel_closed)
         self.setup_exchange()
 
 
@@ -690,7 +691,7 @@ class RMQInterface():
         Raises:
             None
         '''
-        # Ignore channel - Already stored as self.__channel
+        # Ignore channel - Already stored as self._channel
         # Ignore err - Unused
         del channel
         del err
@@ -722,21 +723,21 @@ class RMQInterface():
         def setup_exchange_callback(frame):
             self.on_exchange_declareok(frame)
 
-        if not self.__exchange:
+        if not self._exchange:
             # We will bypass the exchange and send to the queue
-            self.__routing_key = self.queue
-            if self.__use_select_connection: self.setup_queue()
+            self._routing_key = self.queue
+            if self._use_select_connection: self.setup_queue()
         else:
-            if self.__use_select_connection:
-                if isinstance(self.__channel, pika.channel.Channel): 
-                    self.__channel.exchange_declare(
-                        exchange=self.__exchange,
+            if self._use_select_connection:
+                if isinstance(self._channel, pika.channel.Channel): 
+                    self._channel.exchange_declare(
+                        exchange=self._exchange,
                         exchange_type=ExchangeType.topic,
                         callback=setup_exchange_callback
                     )
             else:
-                if self.__channel: self.__channel.exchange_declare(
-                    exchange=self.__exchange,
+                if self._channel: self._channel.exchange_declare(
+                    exchange=self._exchange,
                     exchange_type=ExchangeType.topic)
 
 
@@ -801,10 +802,10 @@ class RMQInterface():
 
         _queue_res = None
 
-        if self.__use_select_connection:
+        if self._use_select_connection:
             if self.queue_ttl > 0:
-                if isinstance(self.__channel, pika.channel.Channel): 
-                    _queue_res = self.__channel.queue_declare(
+                if isinstance(self._channel, pika.channel.Channel): 
+                    _queue_res = self._channel.queue_declare(
                         queue=self.queue,
                         durable=False,
                         auto_delete=True,
@@ -812,8 +813,8 @@ class RMQInterface():
                         callback=setup_queue_callback
                     )
             else:
-                if isinstance(self.__channel, pika.channel.Channel): 
-                    _queue_res = self.__channel.queue_declare(
+                if isinstance(self._channel, pika.channel.Channel): 
+                    _queue_res = self._channel.queue_declare(
                         queue=self.queue,
                         durable=True,
                         arguments=_declare_args, 
@@ -825,16 +826,16 @@ class RMQInterface():
 
         else:
             if self.queue_ttl > 0:
-                if self.__channel:
-                    _queue_res = self.__channel.queue_declare(
+                if self._channel:
+                    _queue_res = self._channel.queue_declare(
                         queue=self.queue,
                         durable=False,
                         auto_delete=True,
                         arguments=_declare_args
                     )
             else:
-                if self.__channel:
-                    _queue_res = self.__channel.queue_declare(
+                if self._channel:
+                    _queue_res = self._channel.queue_declare(
                         queue=self.queue,
                         durable=True,
                         arguments=_declare_args
@@ -843,12 +844,12 @@ class RMQInterface():
             if _queue_res and _queue_res.method:
                 self.queue_message_count = _queue_res.method.message_count
 
-            if self.__exchange:
-                if isinstance(self.__channel, pika.channel.Channel):
-                    self.__channel.queue_bind(
+            if self._exchange:
+                if isinstance(self._channel, pika.channel.Channel):
+                    self._channel.queue_bind(
                         self.queue,
-                        self.__exchange,
-                        routing_key=self.__routing_key
+                        self._exchange,
+                        routing_key=self._routing_key
                     )
 
             self.set_qos()
@@ -882,11 +883,11 @@ class RMQInterface():
         def bind_callback(cb_frame):
             self.on_bindok(cb_frame)
 
-        if self.__exchange:
-            if isinstance(self.__channel, pika.channel.Channel): 
-                self.__channel.queue_bind(
-                    self.queue, self.__exchange,
-                    routing_key=self.__routing_key,
+        if self._exchange:
+            if isinstance(self._channel, pika.channel.Channel): 
+                self._channel.queue_bind(
+                    self.queue, self._exchange,
+                    routing_key=self._routing_key,
                     callback=bind_callback
                 )
         else:
@@ -934,15 +935,15 @@ class RMQInterface():
         Raises:
             None
         '''
-        if self.__use_select_connection:
-            if isinstance(self.__channel, pika.channel.Channel):
-                self.__channel.basic_qos(
+        if self._use_select_connection:
+            if isinstance(self._channel, pika.channel.Channel):
+                self._channel.basic_qos(
                     prefetch_count=PREFETCH_COUNT,
                     callback=self.on_basic_qos_ok
                 )
         else:
-            if self.__channel: 
-                self.__channel.basic_qos(prefetch_count=PREFETCH_COUNT)
+            if self._channel: 
+                self._channel.basic_qos(prefetch_count=PREFETCH_COUNT)
 
 
     #
@@ -995,23 +996,23 @@ class RMQInterface():
         assert callable(self.message_handler), \
             "message_handler must be callable"
 
-        if not self.__channel: return
+        if not self._channel: return
 
-        if self.__use_select_connection:
-            self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
+        if self._use_select_connection:
+            self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
-        self.__consumer_tag = self.__channel.basic_consume(
+        self._consumer_tag = self._channel.basic_consume(
             self.queue,
             on_message_callback = self.message_handler
         )
-        self.__consuming = True
+        self._consuming = True
 
-        if not self.__use_select_connection:
+        if not self._use_select_connection:
             if isinstance(
-                    self.__channel,
+                    self._channel,
                     pika.adapters.blocking_connection.BlockingChannel
             ):
-                self.__channel.start_consuming()
+                self._channel.start_consuming()
 
 
     #
@@ -1030,20 +1031,20 @@ class RMQInterface():
         Raises:
             None
         '''
-        if isinstance(self.__channel, pika.channel.Channel):
+        if isinstance(self._channel, pika.channel.Channel):
             def cancel_callback(frame):
                 self.on_cancelok(frame)
 
-            self.__channel.basic_cancel(
-                self.__consumer_tag,
+            self._channel.basic_cancel(
+                self._consumer_tag,
                 callback=cancel_callback
             )
 
         elif isinstance(
-            self.__channel,
+            self._channel,
             pika.adapters.blocking_connection.BlockingChannel
         ):
-            self.__channel.basic_cancel(self.__consumer_tag)
+            self._channel.basic_cancel(self._consumer_tag)
 
 
     #
@@ -1068,8 +1069,8 @@ class RMQInterface():
         # Ignore frame - Unused
         del frame
 
-        if self.__channel:
-            self.__channel.close()
+        if self._channel:
+            self._channel.close()
 
 
     #
@@ -1094,7 +1095,7 @@ class RMQInterface():
         # Ignore frame - Unused
         del frame
 
-        self.__consuming = False
+        self._consuming = False
         self.close_channel()
 
 
@@ -1118,20 +1119,20 @@ class RMQInterface():
             None
         
         '''
-        if not self.__channel: return
+        if not self._channel: return
         if delivery_tag < 1: return
 
-        if self.__channel.is_open:
-            if self.__use_select_connection:
-                if isinstance(self.__connection, pika.SelectConnection):
-                    self.__connection.ioloop.add_callback_threadsafe(
+        if self._channel.is_open:
+            if self._use_select_connection:
+                if isinstance(self._connection, pika.SelectConnection):
+                    self._connection.ioloop.add_callback_threadsafe(
                         functools.partial(
-                            self.__channel.basic_ack,
+                            self._channel.basic_ack,
                             delivery_tag=delivery_tag
                         )
                     )
             else:
-                self.__channel.basic_ack(delivery_tag=delivery_tag)
+                self._channel.basic_ack(delivery_tag=delivery_tag)
     
 
     #
@@ -1153,22 +1154,22 @@ class RMQInterface():
         Raises:
             None
         '''
-        if not self.__channel: return
+        if not self._channel: return
         if delivery_tag < 1: return
 
-        if self.__channel.is_open:
-            if self.__use_select_connection:
-                if isinstance(self.__connection, pika.SelectConnection):
-                    self.__connection.ioloop.add_callback_threadsafe(
+        if self._channel.is_open:
+            if self._use_select_connection:
+                if isinstance(self._connection, pika.SelectConnection):
+                    self._connection.ioloop.add_callback_threadsafe(
                         functools.partial(
-                            self.__channel.basic_nack,
+                            self._channel.basic_nack,
                             delivery_tag=delivery_tag,
                             multiple=False,
                             requeue=True
                         )
                     )
             else:
-                self.__channel.basic_nack(
+                self._channel.basic_nack(
                     delivery_tag=delivery_tag,
                     multiple=False,
                     requeue=True
@@ -1206,10 +1207,10 @@ class RMQInterface():
             raise exception.RMQMessageSizeError("Message is too large")
 
         # Send it
-        if self.__channel:
-            self.__channel.basic_publish(
-                exchange=self.__exchange,
-                routing_key=self.__routing_key,
+        if self._channel:
+            self._channel.basic_publish(
+                exchange=self._exchange,
+                routing_key=self._routing_key,
                 body=body,
                 properties=properties
             )
