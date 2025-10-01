@@ -274,37 +274,35 @@ class RMQInterface():
         if not isinstance(self._connection, pika.BlockingConnection):
             return _msg_bytes, _msg_properties
 
-        if not isinstance(self._channel, pika.channel.Channel):
+        if not isinstance(
+                self._channel, 
+                pika.adapters.blocking_connection.BlockingChannel
+        ):
             return _msg_bytes, _msg_properties
 
         if not self._channel.is_open:
             return _msg_bytes, _msg_properties
 
-        import signal
+        if isinstance(timeout, int):
+            if timeout <= 0: timeout = None
+        else:
+            timeout = None
 
-        if isinstance(timeout, int) and timeout > 0:
-            # Set up signal handler for an alarm to create the timeout
-            def timeout_handler(signum, frame):
-                raise RMQ_Timeout("Timeout")
-
-            signal.signal(signal.SIGALRM, timeout_handler)
-
-            # Set an alarm
-            signal.alarm(timeout)
-
-        # Wait for the reply message (will get a signal after timeout seconds)
+        # Consume messages
         _timeout_occurred = False
-        try:
-            _, _msg_properties, _msg_bytes = self._channel.basic_get(
+        for _method, _properties, _body in self._channel.consume(
                 self.queue,
-                auto_ack=True
-            )   # type: ignore
+                auto_ack=True,
+                exclusive=True,
+                inactivity_timeout=timeout
+        ):
+            if not _method:
+                _timeout_occurred = True
+                break
 
-        except RMQ_Timeout:
-            _timeout_occurred = True
-
-        # Cancel the alarm (if set)
-        signal.alarm(0)
+            _msg_bytes =_body
+            _msg_properties = _properties
+            break
 
         # Close the connection
         self.close_channel()

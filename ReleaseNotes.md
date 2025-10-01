@@ -1,8 +1,13 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.21__
+Released: 2025-10-01
+* Fix - RMQInterface - Change 'receive' function to use basic_consume
+
+
 __Version 1.0.20__
-Released: 2025-09-XX
+Released: 2025-09-25
 * Fix - RMQInterface - Correct 'receive' function connect/disconnect
 * Fix - TaskQueue - Correct calculations for timeouts and keepalives
 
