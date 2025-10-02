@@ -1162,7 +1162,7 @@ class RMQInterface():
             delivery_tag: int = 0
     ):
         '''
-        Reject/Requeu a message due to a transient processing failure
+        Reject/Requeue a message due to a transient processing failure
 
         Args:
             delivery_tag (int): delivery_tag of the message to reject
