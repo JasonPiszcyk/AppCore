@@ -153,7 +153,6 @@ class TelemetryServer():
         self.__hostname= hostname
         self.__port = port
         self.__stop_event = stop_event
-        self.__webserver: HTTPServer | None = None
 
         # Attributes
 
@@ -230,16 +229,16 @@ class TelemetryServer():
         # END -> WebServer Class
         #####################################################################
 
-        self.__webserver = HTTPServer(
+        _webserver = HTTPServer(
             (self.__hostname, self.__port),
             WebServer
         )
 
         while not self.__stop_event.is_set():
-            self.__webserver.handle_request()
+            _webserver.handle_request()
 
         self.__stop_event.clear()
-        self.__webserver.server_close()
+        _webserver.server_close()
 
 
     #

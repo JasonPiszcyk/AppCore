@@ -452,6 +452,17 @@ class Task(AppCoreModuleBase):
                 # Wait for the process to finish
                 _process.join(TASK_JOIN_TIMEOUT)
 
+                # Terminate the process
+                if _process.is_alive():
+                    _process.terminate()
+                    _process.join(TASK_JOIN_TIMEOUT)
+
+                # Kill the process
+                if _process.is_alive():
+                    _process.kill()
+                    _process.join(TASK_JOIN_TIMEOUT)
+
+                # Have a problem...
                 if _process.is_alive():
                     raise exception.TaskIsRunningError(
                         f"Process failed to stop (Task: {self.name})"

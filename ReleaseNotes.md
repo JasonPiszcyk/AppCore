@@ -1,6 +1,12 @@
 # AppCore
 ## Release Notes
 
+__Version 1.0.22__
+Released: 2025-10-XX
+* Change - Task - Cleanup modified to try terminating, then killing a process
+* Fix - Telemetry - Don't store webserver info in Telemtry instance
+
+
 __Version 1.0.21__
 Released: 2025-10-01
 * Fix - RMQInterface - Change 'receive' function to use basic_consume
