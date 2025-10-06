@@ -1,6 +1,12 @@
 # AppCore
 ## Release Notes
 
+
+__Version 1.0.23__
+Released: 2025-10-XX
+* Change - RMQ - Transient queues declared as Durable
+
+
 __Version 1.0.22__
 Released: 2025-10-XX
 * Change - Task - Cleanup modified to try terminating, then killing a process

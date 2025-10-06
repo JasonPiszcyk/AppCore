@@ -826,7 +826,7 @@ class RMQInterface():
                 if isinstance(self._channel, pika.channel.Channel): 
                     _queue_res = self._channel.queue_declare(
                         queue=self.queue,
-                        durable=False,
+                        durable=True,
                         auto_delete=True,
                         arguments=_declare_args,
                         callback=setup_queue_callback
@@ -848,7 +848,7 @@ class RMQInterface():
                 if self._channel:
                     _queue_res = self._channel.queue_declare(
                         queue=self.queue,
-                        durable=False,
+                        durable=True,
                         auto_delete=True,
                         arguments=_declare_args
                     )
