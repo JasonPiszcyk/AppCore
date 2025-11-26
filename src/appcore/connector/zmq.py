@@ -350,6 +350,7 @@ class ZMQInterface(AppCoreModuleBase):
                         # Response is sent via a call to the 'response'
                         # method in the handler
                         self.request_handler(self, _client_id, _data)
+
                     continue
 
                 self.logger.error(
