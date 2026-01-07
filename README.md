@@ -1,7 +1,7 @@
 # AppCore
 Copyright (c) 2025 Jason Piszcyk
 
-Core Components used to create an application.
+Core Components for other 'App*' modules
 
 <!-- 
 Not yet Published to PyPi
@@ -11,34 +11,21 @@ Not yet Published to PyPi
 
 ## Overview
 
-**AppCore** provides reusable core components to help you build robust Python applications. It is designed to be used with multi-process and/or multithreaded apps, by providing access to resources that operate in these environments.
+**AppCore** provides reusable core components for the 'App' series of modules.
 
 ## Features
 
 **AppCore** consists of a number of sub-modules, being:
-- Multiprocessing
-  - A generalised Task interface proving multiprocessing via Process and Threads
-    - Task Lifecycle management including starting, stopping and watchdog processing to ensure task state
-  - Support for communication between Tasks via:
-    - Queues
-  - Support for Task synchronisation via:
-    - Events
-    - Barriers
-  - Support for shared locking between tasks via:
-    - Locks
-- Logging
-  - Simplified logging interface
-- Datastores
-  - Local - Data is available in process via shared global variables
-  - System - Data is shareable amongst multiple tasks
-  - Redis - Data is shareable via the external datastore Redis
-  - INIFile - Data is shareable via INI Files
-- Scheduler
-  - A task scheduler, supporting:
-    - Scheduling of tasks on a regular interval (eg every 60 seconds)
-    - Scheduling of tasks at a specific time (eg at 12:30 pm)
-- Telemetry
-  - A telemetry module that exposes information via a web server
+- Conversion
+  - A collection of conversion functions
+    - set_value - Ensure a value is set to the specific DataType
+    - get_value_type - Get the data type of a value
+    - to_json, from_json - Convert data to and from JSON
+    - from_base64, from_base64 - Convert data to and from base 64
+- Helpers
+  - A collection of general functions
+    - timestamp - Generate a timestamp
+
 
 ## Installation
 
@@ -51,14 +38,9 @@ pip install "appcore @ git+https://github.com/JasonPiszcyk/AppCore"
 
 - Python >= 3.8
 
-**NOTE:** The task_queue module does not work correctly on Python versions < 3.12 due to problems in thge SyncManager implementation.  If intending to use queuing it is recommended to use Python 3.12 or higher as there is better multiprocessing support.
-
 ## Dependencies
 
-- requests
-- urllib3
 - pytest
-- redis
 - "crypto_tools @ git+https://github.com/JasonPiszcyk/CryptoTools"
 
 ## Usage

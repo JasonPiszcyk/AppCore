@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Exception - Custom exceptions that can be raised by this module
+General Helper functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -27,6 +27,7 @@ along with this program (See file: COPYING). If not, see
 # Shared variables, constants, etc
 
 # System Modules
+import datetime
 
 # Local app modules
 
@@ -55,22 +56,33 @@ along with this program (See file: COPYING). If not, see
 
 ###########################################################################
 #
-# Exceptions
+# Module
 #
 ###########################################################################
-class DataStoreRedisNotConnected(Exception):
-    ''' A connection has not been established to Redis '''
-    pass
+#
+# timestamp
+#
+def timestamp(offset: int = 0) -> int:
+    '''
+    Create a timestamp (in seconds) since the epoch to now
 
+    Args:
+        offset (int): Number of seconds to offset the timestamp by
 
-class DataStoreDotNameError(Exception):
-    ''' An error occurred when using dot names '''
-    pass
+    Returns:
+        int: The number of seconds since the epoch to now, +/- offset
 
+    Raises:
+        AssertionError:
+            When the offset is not an integer value
+    '''
+    assert isinstance(offset, int)
 
-class DataStoreUnknownFormatError(Exception):
-    ''' Unknown format in the datastore '''
-    pass
+    # Get the current time
+    _now = datetime.datetime.now(datetime.timezone.utc)
+
+    # Return the timestamp
+    return int(_now.timestamp()) + offset
 
 
 ###########################################################################

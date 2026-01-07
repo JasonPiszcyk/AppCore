@@ -19,10 +19,20 @@ You should have received a copy of the GNU General Public License
 along with this program (See file: COPYING). If not, see
 <https://www.gnu.org/licenses/>.
 '''
+###########################################################################
+#
+# Imports
+#
+###########################################################################
+# Shared variables, constants, etc
+from tests.constants import *
 
+# System Modules
 import pytest
-import web_request as WebRequest
-from appcore.manager import AppCoreManager
+
+# Local app modules
+
+# Imports for python variable type hints
 
 
 ###########################################################################
@@ -30,49 +40,24 @@ from appcore.manager import AppCoreManager
 # Config
 #
 ###########################################################################
-def pytest_configure(config):
+def pytest_configure(config: pytest.Config):
+    '''
+    Global configuration for the PyTest session
+
+    Args:
+        config (pytest.Config): Configuration information
+
+    Returns:
+        None
+
+    Raises:
+        None
+    '''
     pass
+
 
 ###########################################################################
 #
 # Fixtures
 #
 ###########################################################################
-#
-# manager (AppCore manager)
-#
-@pytest.fixture(scope="session")
-def manager():
-    return AppCoreManager(log_file="/tmp/appcore.log", log_level="debug")
-
-
-#
-# Access to scheduler
-#
-@pytest.fixture(scope="session")
-def scheduler(manager):
-    _scheduler = manager.StartScheduler()
-
-    yield _scheduler
-
-    manager.shutdown()
-
-
-#
-# The telemetry server
-#
-@pytest.fixture(scope="session")
-def telemetry_server(manager):
-    _ts = manager.StartTelemetryServer()
-
-    yield _ts
-
-    manager.shutdown()
-
-
-#
-# A web request
-#
-@pytest.fixture(scope="function")
-def web_request():
-    return WebRequest.Web_Request()

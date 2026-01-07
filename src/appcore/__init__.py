@@ -21,7 +21,6 @@ along with this program (See file: COPYING). If not, see
 '''
 
 # What to import when 'import * from module'
-__all__ = [ "AppCoreManager", ]
+__all__ = [ ]
 
 # What to import as part of the the module (import module)
-from appcore.manager import AppCoreManager

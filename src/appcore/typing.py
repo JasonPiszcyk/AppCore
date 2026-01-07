@@ -30,12 +30,10 @@ from __future__ import annotations
 
 # System Modules
 import enum
-import logging
 
 # Local app modules
 
 # Imports for python variable type hints
-from typing import Any
 
 
 ###########################################################################
@@ -71,52 +69,6 @@ class DataType(enum.Enum):
     UUID3           = "uuid3"
     UUID4           = "uuid4"
     UUID5           = "uuid5"
-
-
-#
-# TaskStatus
-#
-class TaskStatus(enum.Enum):
-    UNKNOWN         = "Unknown"
-    NOT_STARTED     = "Not Started"
-    RUNNING         = "Running"
-    ERROR           = "Error"
-    COMPLETED       = "Completed"
-
-
-#
-# TaskAction
-#
-class TaskAction(enum.Enum):
-    START           = "Start"
-    STOP            = "Stop"
-    RESTART         = "Restart"
-    IGNORE          = "Ignore"
-
-
-#
-# LoggingLevel
-#
-class LoggingLevel(enum.Enum):
-    CRITICAL        = "critical", logging.CRITICAL
-    FATAL           = "fatal", logging.CRITICAL
-    ERROR           = "error", logging.ERROR
-    WARNING         = "warning", logging.WARNING
-    WARN            = "warn", logging.WARNING
-    INFO            = "info", logging.INFO
-    DEBUG           = "debug", logging.DEBUG
-    NOTSET          = "notset", logging.NOTSET
-
-    # Additional info
-    def __init__(self, value, level):
-        self._value_ = value
-        self.level = level
-
-    def __new__(cls, value, level):
-        obj = object.__new__(cls)
-        obj._value_ = value
-        obj.level = level
-        return obj
 
 
 ###########################################################################

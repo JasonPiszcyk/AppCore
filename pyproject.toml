@@ -16,12 +16,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "requests",
-  "urllib3",
   "pytest",
-  "redis",
-  "zmq",
-  "pika",
   "crypto_tools @ git+https://github.com/JasonPiszcyk/CryptoTools",
 ]
 

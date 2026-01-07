@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-Shared info (eg variables, constants types)
+Conversion functions
 
 Copyright (C) 2025 Jason Piszcyk
 Email: Jason.Piszcyk@gmail.com
@@ -145,7 +145,7 @@ def get_value_type(
         TypeError:
             When the data type is unsupported
     '''
-    # Determine the type of the data
+    # Determine the type of the data - JSON supported types
     if isinstance(data, dict): return DataType.DICTIONARY
     if isinstance(data, list): return DataType.LIST
     if isinstance(data, str): return DataType.STRING
@@ -171,7 +171,7 @@ def get_value_type(
 def to_json(
         data: Any = None,
         skip_invalid: bool = False,
-        container: bool = True
+        container: bool = False
 ) -> str:
     '''
     Convert data to JSON.
@@ -219,7 +219,7 @@ def to_json(
 #
 def from_json(
         data: str = "",
-        container: bool = True
+        container: bool = False
 ) -> Any:
     '''
     Convert a JSON string to python data
