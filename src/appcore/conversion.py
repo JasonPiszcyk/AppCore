@@ -30,6 +30,7 @@ from __future__ import annotations
 
 # System Modules
 import uuid
+import pickle
 import json
 import base64
 
@@ -53,6 +54,11 @@ from typing import Any
 # Constants
 #
 ENCODE_METHOD = "utf-8"
+
+# Pickle Protocol 5 is supported in Python >= 3.8
+MIN_PICKLE_PROTOCOL = 0
+MAX_PICKLE_PROTOCOL = 5
+DEFAULT_PICKLE_PROTOCOL = 5
 
 #
 # Global Variables
@@ -165,6 +171,114 @@ def get_value_type(
     )
 
 
+###########################################################################
+#
+# Pickle Functions
+#
+###########################################################################
+#
+# to_pickle
+#
+def to_pickle(
+        data: Any = None,
+        protocol: int = DEFAULT_PICKLE_PROTOCOL,
+        fix_imports: bool = True
+) -> bytes:
+    '''
+    Convert data to a python pickle.
+
+    Args:
+        data (Any): The data to be converted
+        protocol (int): The pickle prootocol to use
+        fix_imports (bool): If protocol is less than 3, pickle will try to map
+            the new Python 3 names to the old module names used in Python 2, so
+            that the pickle data stream is readable with Python 2
+
+    Returns:
+        bytes: The data as a python pickle
+
+    Raises:
+        AssertionError:
+            When the protocol is not an int or not between 1 and 5
+        TypeError:
+            When the data cannot be converted to a pickle
+    '''
+    assert isinstance(protocol, int), "protocol must be an integer"
+    assert (
+                protocol >= MIN_PICKLE_PROTOCOL and
+                protocol <= MAX_PICKLE_PROTOCOL
+    ), (
+            f"protocol must be between {MIN_PICKLE_PROTOCOL} "
+            f"and {MAX_PICKLE_PROTOCOL}"
+    )
+
+    _exc = ""
+    try:
+        return pickle.dumps(data, protocol=protocol, fix_imports=fix_imports)
+
+    except Exception as _err:
+        _exc = str(_err)
+
+    # Something broke - Raise it a TypeError (standard for this module)
+    raise TypeError(_exc)
+
+
+#
+# from_pickle
+#
+def from_pickle(
+        data: Any = None,
+        fix_imports: bool = True,
+        encoding: str = "ASCII",
+        errors: str = "strict"
+) -> Any:
+    '''
+    Convert a python pickle to python data
+
+    Args:
+        data (str): The json data
+        fix_imports (bool): If protocol is less than 3, pickle will try to map
+            the new Python 3 names to the old module names used in Python 2, so
+            that the pickle data stream is readable with Python 2
+        encoding (str): Used to determine how to decode 8-bit string instances
+            pickled by Python 2
+        errors (str): Used to determine how to decode 8-bit string instances
+            pickled by Python 2
+    
+    Returns:
+        Any: The data converted from the pickle
+
+    Raises:
+        AssertionError:
+            When encoding is not a string
+            When errors is not a string
+        TypeError:
+            When the data cannot be converted from a pickle
+    '''
+    assert isinstance(encoding, str), "encoding must be a string"
+    assert isinstance(errors, str), "errors must be a string"
+
+    _exc = ""
+    try:
+        return pickle.loads(
+            data,
+            fix_imports=fix_imports,
+            encoding=encoding,
+            errors=errors
+        )
+
+    except Exception as _err:
+        _exc = str(_err)
+
+    # Something broke - Raise it a TypeError (standard for this module)
+    raise TypeError(_exc)
+
+
+###########################################################################
+#
+# JSON Functions
+#
+###########################################################################
 #
 # to_json
 #
@@ -261,6 +375,11 @@ def from_json(
     return _value
 
 
+###########################################################################
+#
+# Base64 Functions
+#
+###########################################################################
 #
 # to_base64
 #
