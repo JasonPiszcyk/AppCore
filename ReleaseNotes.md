@@ -2,13 +2,34 @@
 ## Release Notes
 
 
+__Version 2.0.1__
+Released: 2025-01-12
+* New - Pickle - Added to_pickle, from_pickle conversion functions
+
+
+__Version 2.0.0__
+Released: 2026-01-08
+* Change - Removed most submodules to separate modules 
+
+
 __Version 1.0.23__
-Released: 2025-10-XX
+Released: 2025-10-15
 * Change - RMQ - Transient queues declared as Durable
+
+The following modules remain in AppCore:
+- Conversion
+  - A collection of conversion functions
+    - set_value - Ensure a value is set to the specific DataType
+    - get_value_type - Get the data type of a value
+    - to_json, from_json - Convert data to and from JSON
+    - from_base64, from_base64 - Convert data to and from base 64
+- Helpers
+  - A collection of general functions
+    - timestamp - Generate a timestamp
 
 
 __Version 1.0.22__
-Released: 2025-10-XX
+Released: 2025-10-08
 * Change - Task - Cleanup modified to try terminating, then killing a process
 * Fix - Telemetry - Don't store webserver info in Telemtry instance
 

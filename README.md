@@ -20,6 +20,7 @@ Not yet Published to PyPi
   - A collection of conversion functions
     - set_value - Ensure a value is set to the specific DataType
     - get_value_type - Get the data type of a value
+    - to_pickle, from_pickle - Convert data to and from python Pickle
     - to_json, from_json - Convert data to and from JSON
     - from_base64, from_base64 - Convert data to and from base 64
 - Helpers

@@ -127,8 +127,8 @@ class Test_JSON():
 
         # Convert with container
         _container_val = (
-            f"{{\"value\": {DATASET[name]["json"]}, "
-            f"\"type\": \"{DATASET[name]["container_type"]}\"}}"
+            f"{{\"value\": {DATASET[name]['json']}, "
+            f"\"type\": \"{DATASET[name]['container_type']}\"}}"
         )
         _json = to_json(
             data=DATASET[name]["data"],
@@ -170,8 +170,8 @@ class Test_JSON():
 
         # Convert with container
         _container_val = (
-            f"{{\"value\": {DATASET[name]["json"]}, "
-            f"\"type\": \"{DATASET[name]["container_type"]}\"}}"
+            f"{{\"value\": {DATASET[name]['json']}, "
+            f"\"type\": \"{DATASET[name]['container_type']}\"}}"
         )
         _data = from_json(
             data=_container_val,
