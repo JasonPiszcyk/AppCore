@@ -117,7 +117,7 @@ class MemFile():
         be a fernet encryption key.
 
         If a password is provided, an encryption key will be derived using 
-        the password and the salt will be provided in the encryption file.
+        the password.
 
         If both a key and a password are provided, the key will be used, and
         the password will be ignored.

@@ -76,7 +76,7 @@ DEFAULT_PICKLE_PROTOCOL = 5
 def set_value(
         data: Any = None,
         type: DataType = DataType.STRING,
-        default: Any = None
+        default: Any = ""
     ) -> Any:
     '''
     Convert data to the specified type, using the default value if an error
@@ -227,7 +227,7 @@ def to_pickle(
 # from_pickle
 #
 def from_pickle(
-        data: Any = None,
+        data: bytes = b"",
         fix_imports: bool = True,
         encoding: str = "ASCII",
         errors: str = "strict"
@@ -236,7 +236,7 @@ def from_pickle(
     Convert a python pickle to python data
 
     Args:
-        data (str): The json data
+        data (bytes): The pickle data
         fix_imports (bool): If protocol is less than 3, pickle will try to map
             the new Python 3 names to the old module names used in Python 2, so
             that the pickle data stream is readable with Python 2
