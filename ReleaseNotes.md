@@ -2,6 +2,11 @@
 ## Release Notes
 
 
+__Version 2.0.2__
+Released: 2026-01-21
+* Updated documentation/README
+
+
 __Version 2.0.1__
 Released: 2025-01-12
 * New - Pickle - Added to_pickle, from_pickle conversion functions
