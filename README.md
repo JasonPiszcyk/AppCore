@@ -184,8 +184,7 @@ The value of the DataType Enum is the name in lower case. This can be used to st
 
 ### <a id="memfile-usage"></a>MemFile
 
-
-*class* AppCore.**MemFile**()
+#### *class* AppCore.**MemFile**()
 
 Class to implement a memory based file.
 
